@@ -1,3 +1,4 @@
+
 import asyncio
 import aiohttp
 import sqlite3
@@ -165,4 +166,6 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
+    from keep_alive import keep_alive
+    keep_alive()
     asyncio.run(main())

@@ -1,0 +1,12 @@
+2025-06-01 15:51:39,917 - __main__ - INFO - Database initialized successfully
+2025-06-01 15:51:39,917 - __main__ - INFO - Starting bot...
+2025-06-01 15:51:39,918 - aiogram.dispatcher - INFO - Start polling
+2025-06-01 15:51:40,590 - aiogram.dispatcher - INFO - Run polling for bot @onlineregistration1_bot id=7516148927 - 'online registration'
+2025-06-01 15:51:41,400 - __main__ - INFO - Start conversation with user 7046147843
+2025-06-01 15:51:41,400 - aiogram.event - INFO - Update id=563174898 is handled. Duration 544 ms by bot id=7516148927
+2025-06-01 15:51:48,905 - __main__ - INFO - User 7046147843 provided name: эржан
+2025-06-01 15:51:48,906 - aiogram.event - INFO - Update id=563174899 is handled. Duration 280 ms by bot id=7516148927
+2025-06-01 15:52:58,121 - __main__ - INFO - Start conversation with user 7046147843
+2025-06-01 15:52:58,121 - aiogram.event - INFO - Update id=563174900 is handled. Duration 193 ms by bot id=7516148927
+2025-06-01 15:53:03,416 - __main__ - INFO - User 7046147843 provided name: эржан
+2025-06-01 15:53:03,417 - aiogram.event - INFO - Update id=563174901 is handled. Duration 166 ms by bot id=7516148927
