@@ -137,7 +137,6 @@ async def confirm(message: types.Message, state: FSMContext):
     if not success:
         await message.answer("❌ Ошибка при сохранении записи. Попробуйте позже.")
         return
-    await send_to_telegram_fallback(**data)
     await message.answer(
         f"✅ Запись подтверждена!\n\n"
         f"Имя: {data['name']}\n"
@@ -149,12 +148,6 @@ async def confirm(message: types.Message, state: FSMContext):
     )
     await state.clear()
 
-async def send_to_telegram_fallback(name, date, time, service, phone):
-    try:
-        text = f"📅 Новая запись:\nИмя: {name}\nУслуга: {service}\nДата: {date}\nВремя: {time}\nТелефон: {phone}"
-        await bot.send_message(chat_id=config.ADMIN_USER_ID, text=text)
-    except Exception as e:
-        logging.error(f"Ошибка отправки в Telegram: {e}")
 
 async def run_web():
     runner = web.AppRunner(app)
