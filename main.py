@@ -1,6 +1,5 @@
 import asyncio
 import aiohttp
-import sqlite3
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart, Command
@@ -11,9 +10,10 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import config
 import urllib.parse
 from datetime import datetime
-import pytz  # Для работы с часовыми поясами
-import logging  # Для логирования
-from keep_alive import app  # Предполагается, что keep_alive.py существует и корректен
+import pytz
+import logging
+from keep_alive import app  # Твой веб-сервер (предполагается, что есть)
+from db import init_db, add_booking, get_all_bookings  # Импорт функций из db.py
 
 # Настройка логирования
 logging.basicConfig(
@@ -22,11 +22,9 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-# Инициализация бота и диспетчера
 bot = Bot(token=config.BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-# Услуги
 services = [
     "Наращивание ресниц",
     "Ламинирование ресниц",
@@ -46,70 +44,6 @@ class BookingForm(StatesGroup):
     date = State()
     time = State()
     phone = State()
-
-def init_db():
-    with sqlite3.connect('appointments.db') as conn:
-        c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS bookings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
-            date TEXT,
-            time TEXT,
-            service TEXT,
-            phone TEXT
-        )''')
-        conn.commit()
-    logging.info("База данных инициализирована")
-
-def add_booking(name, date, time, service, phone):
-    with sqlite3.connect('appointments.db') as conn:
-        c = conn.cursor()
-        c.execute("INSERT INTO bookings (name, date, time, service, phone) VALUES (?, ?, ?, ?, ?)", 
-                  (name, date, time, service, phone))
-        conn.commit()
-    logging.info(f"Добавлена запись: {name}, {service}, {date}, {time}, {phone}")
-
-def check_time_availability(date, time):
-    with sqlite3.connect('appointments.db') as conn:
-        c = conn.cursor()
-        c.execute("SELECT COUNT(*) FROM bookings WHERE date = ? AND time = ?", (date, time))
-        count = c.fetchone()[0]
-    return count == 0
-
-def get_all_bookings():
-    with sqlite3.connect('appointments.db') as conn:
-        c = conn.cursor()
-        c.execute("SELECT id, name, date, time, service, phone FROM bookings ORDER BY date, time")
-        bookings = c.fetchall()
-    return bookings
-
-async def send_to_whatsapp(name, date, time, service, phone):
-    phone_number = config.ADMIN_PHONE
-    apikey = config.apikey
-    message = f"📅 Новая запись:\nИмя: {name}\nУслуга: {service}\nДата: {date}\nВремя: {time}\nТелефон: {phone}"
-    encoded_message = urllib.parse.quote(message)
-    url = f"https://api.callmebot.com/whatsapp.php?phone={phone_number}&text={encoded_message}&apikey={apikey}"
-    async with aiohttp.ClientSession() as session:
-        try:
-            async with session.get(url) as resp:
-                response_text = await resp.text()
-                if resp.status == 200:
-                    logging.info(f"Успешно отправлено в WhatsApp: {message}")
-                    return True
-                else:
-                    logging.error(f"Ошибка отправки в WhatsApp, код {resp.status}: {response_text}")
-                    return False
-        except Exception as e:
-            logging.error(f"Исключение при отправке в WhatsApp: {e}")
-            return False
-
-async def send_to_telegram_fallback(name, date, time, service, phone):
-    try:
-        message = f"📅 Новая запись (резерв):\nИмя: {name}\nУслуга: {service}\nДата: {date}\nВремя: {time}\nТелефон: {phone}"
-        await bot.send_message(chat_id=config.ADMIN_USER_ID, text=message)
-        logging.info(f"Резервное сообщение отправлено в Telegram: {message}")
-    except Exception as e:
-        logging.error(f"Исключение при отправке резервного сообщения в Telegram: {e}")
 
 @dp.message(CommandStart())
 async def start(message: types.Message, state: FSMContext):
@@ -159,7 +93,7 @@ async def process_service(callback: types.CallbackQuery, state: FSMContext):
 @dp.message(BookingForm.date)
 async def ask_time(message: types.Message, state: FSMContext):
     date = message.text.strip()
-    timezone = pytz.timezone(config.TIMEZONE)  # Часовой пояс из config
+    timezone = pytz.timezone(config.TIMEZONE)
     try:
         parsed_date = datetime.strptime(date, "%Y-%m-%d")
         local_date = timezone.localize(parsed_date)
@@ -175,6 +109,17 @@ async def ask_time(message: types.Message, state: FSMContext):
     await message.answer("🕓 Во сколько? (например, 14:30)")
     await state.set_state(BookingForm.time)
     logging.info(f"Пользователь {message.from_user.id} выбрал дату: {date}")
+
+# **ВАЖНО**: функция check_time_availability отсутствует в твоём коде,
+# нужно её добавить или удалить проверку в ask_time
+
+def check_time_availability(date: str, time: str) -> bool:
+    # Проверка, занято ли время
+    bookings = get_all_bookings()
+    for b in bookings:
+        if b[2] == date and b[3] == time:
+            return False
+    return True
 
 @dp.message(BookingForm.time)
 async def ask_phone(message: types.Message, state: FSMContext):
@@ -204,7 +149,10 @@ async def confirm(message: types.Message, state: FSMContext):
         return
     await state.update_data(phone=phone)
     data = await state.get_data()
-    add_booking(data["name"], data["date"], data["time"], data["service"], data["phone"])
+    success = add_booking(data["name"], data["date"], data["time"], data["service"], data["phone"])
+    if not success:
+        await message.answer("❌ Ошибка при сохранении записи. Попробуйте позже.")
+        return
     # Отправка в WhatsApp и резервное уведомление
     whatsapp_success = await send_to_whatsapp(data["name"], data["date"], data["time"], data["service"], data["phone"])
     if not whatsapp_success:
@@ -221,23 +169,47 @@ async def confirm(message: types.Message, state: FSMContext):
     logging.info(f"Запись подтверждена для {message.from_user.id}: {data}")
     await state.clear()
 
-# 🌐 Запуск веб-сервера
+async def send_to_whatsapp(name, date, time, service, phone):
+    phone_number = config.ADMIN_PHONE
+    apikey = config.apikey
+    message = f"📅 Новая запись:\nИмя: {name}\nУслуга: {service}\nДата: {date}\nВремя: {time}\nТелефон: {phone}"
+    encoded_message = urllib.parse.quote(message)
+    url = f"https://api.callmebot.com/whatsapp.php?phone={phone_number}&text={encoded_message}&apikey={apikey}"
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(url) as resp:
+                response_text = await resp.text()
+                if resp.status == 200:
+                    logging.info(f"Успешно отправлено в WhatsApp: {message}")
+                    return True
+                else:
+                    logging.error(f"Ошибка отправки в WhatsApp, код {resp.status}: {response_text}")
+                    return False
+        except Exception as e:
+            logging.error(f"Исключение при отправке в WhatsApp: {e}")
+            return False
+
+async def send_to_telegram_fallback(name, date, time, service, phone):
+    try:
+        message = f"📅 Новая запись (резерв):\nИмя: {name}\nУслуга: {service}\nДата: {date}\nВремя: {time}\nТелефон: {phone}"
+        await bot.send_message(chat_id=config.ADMIN_USER_ID, text=message)
+        logging.info(f"Резервное сообщение отправлено в Telegram: {message}")
+    except Exception as e:
+        logging.error(f"Исключение при отправке резервного сообщения в Telegram: {e}")
+
 async def run_web():
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", 8080)
     await site.start()
-    logging.info("Веб-сервер запущен на http://0.0.0.0:8080")
 
-# 🚀 Запуск бота и веба
 async def main():
-    init_db()
-    await asyncio.gather(run_web(), dp.start_polling(bot, skip_updates=True))
+    init_db()  # Инициализация БД
+    await run_web()
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await bot.session.close()
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logging.info("Бот остановлен пользователем")
-    except Exception as e:
-        logging.error(f"Ошибка при запуске: {e}")
+    asyncio.run(main())
