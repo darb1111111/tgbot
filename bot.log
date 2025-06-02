@@ -10,3 +10,15 @@
 2025-06-01 15:52:58,121 - aiogram.event - INFO - Update id=563174900 is handled. Duration 193 ms by bot id=7516148927
 2025-06-01 15:53:03,416 - __main__ - INFO - User 7046147843 provided name: эржан
 2025-06-01 15:53:03,417 - aiogram.event - INFO - Update id=563174901 is handled. Duration 166 ms by bot id=7516148927
+2025-06-02 19:11:23,466 - INFO - База данных инициализирована
+2025-06-02 19:11:23,467 - INFO - Start polling
+2025-06-02 19:11:23,472 - INFO - Веб-сервер запущен на http://0.0.0.0:8080
+2025-06-02 19:11:23,817 - INFO - Run polling for bot @onlineregistration1_bot id=7516148927 - 'online registration'
+2025-06-02 19:11:28,114 - ERROR - Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-06-02 19:11:28,115 - WARNING - Sleep for 1.000000 seconds and try again... (tryings = 0, bot id = 7516148927)
+2025-06-02 19:11:33,609 - ERROR - Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-06-02 19:11:33,609 - WARNING - Sleep for 1.355145 seconds and try again... (tryings = 1, bot id = 7516148927)
+2025-06-02 19:11:39,888 - ERROR - Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-06-02 19:11:39,888 - WARNING - Sleep for 1.842775 seconds and try again... (tryings = 2, bot id = 7516148927)
+2025-06-02 19:11:46,907 - ERROR - Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-06-02 19:11:46,907 - WARNING - Sleep for 2.387707 seconds and try again... (tryings = 3, bot id = 7516148927)
