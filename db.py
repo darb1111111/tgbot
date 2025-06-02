@@ -18,7 +18,7 @@ def add_booking(name, date, time, service, phone):
     conn = sqlite3.connect('appointments.db')
     c = conn.cursor()
     c.execute("INSERT INTO bookings (name, date, time, service, phone) VALUES (?, ?, ?, ?, ?)",
-              (name, date, time, service, phone))
+            (name, date, time, service, phone))
     conn.commit()
     conn.close()
 
