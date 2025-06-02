@@ -141,6 +141,7 @@ async def run_web():
 # 🚀 Запуск
 async def main():
     init_db()
+    print("✅ БД инициализирована")
     await asyncio.gather(run_web(), dp.start_polling(bot))
 
 if __name__ == "__main__":
