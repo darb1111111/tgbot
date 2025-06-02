@@ -1,6 +1,7 @@
 import asyncio
 import aiohttp
-from aiohttp import web
+import sqlite3
+from aiohttp import web  # <-- обязательно!
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.state import State, StatesGroup
@@ -9,8 +10,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import config
 import urllib.parse
-from keep_alive import app  # aiohttp-приложение
-from db import init_db, add_booking, get_all_bookings  # 👈 используем db.py
+from keep_alive import app  # <-- импортируем aiohttp-приложение
 
 bot = Bot(token=config.BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
@@ -34,21 +34,43 @@ class BookingForm(StatesGroup):
     service = State()
     date = State()
     time = State()
-    phone = State()  # новое состояние
+    phone = State()
 
-async def send_to_whatsapp(name, date, time, service, phone):
-    user_phone = "996709111301"
+def init_db():
+    conn = sqlite3.connect('appointments.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS bookings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        date TEXT,
+        time TEXT,
+        service TEXT
+        phone TEXT
+    )''')
+    conn.commit()
+    conn.close()
+
+def add_booking(name, date, time, service):
+    conn = sqlite3.connect('appointments.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO bookings (name, date, time, service) VALUES (?, ?, ?, ?)", (name, date, time, service))
+    conn.commit()
+    conn.close()
+
+def get_all_bookings():
+    conn = sqlite3.connect('appointments.db')
+    c = conn.cursor()
+    c.execute("SELECT id, name, date, time, service FROM bookings ORDER BY date, time")
+    bookings = c.fetchall()
+    conn.close()
+    return bookings
+
+async def send_to_whatsapp(name, date, time, service):
+    phone = "996709111301"
     apikey = config.apikey
-    message = (
-        f"📅 Новая запись:\n"
-        f"Имя: {name}\n"
-        f"Услуга: {service}\n"
-        f"Дата: {date}\n"
-        f"Время: {time}\n"
-        f"Телефон: {phone}"
-    )
+    message = f"📅 Новая запись:\nИмя: {name}\nУслуга: {service}\nДата: {date}\nВремя: {time}"
     encoded_message = urllib.parse.quote(message)
-    url = f"https://api.callmebot.com/whatsapp.php?phone={user_phone}&text={encoded_message}&apikey={apikey}"
+    url = f"https://api.callmebot.com/whatsapp.php?phone={phone}&text={encoded_message}&apikey={apikey}"
     async with aiohttp.ClientSession() as session:
         try:
             async with session.get(url) as resp:
@@ -77,14 +99,7 @@ async def view_bookings(message: types.Message):
         return
     text = "📅 Все записи:\n\n"
     for b in bookings:
-        text += (
-            f"ID: {b[0]}\n"
-            f"Имя: {b[1]}\n"
-            f"Услуга: {b[4]}\n"
-            f"Дата: {b[2]}\n"
-            f"Время: {b[3]}\n"
-            f"Телефон: {b[5]}\n\n"
-        )
+        text += f"ID: {b[0]}\nИмя: {b[1]}\nУслуга: {b[4]}\nДата: {b[2]}\nВремя: {b[3]}\n\n"
     await message.answer(text)
 
 @dp.message(BookingForm.name)
@@ -126,11 +141,11 @@ async def confirm(message: types.Message, state: FSMContext):
         f"Дата: {data['date']}\n"
         f"Время: {data['time']}\n"
         f"Телефон: {data['phone']}\n\n"
-        f"Спасибо за запись! Мы свяжемся с вами для уточнения деталей 💬"
+        f"Спасибо за запись! Мы свяжемся с вами для уточнения деталей. 💬"
     )
     await state.clear()
 
-# 🌐 Веб-сервер
+# 🌐 Запуск веб-сервера
 async def run_web():
     runner = web.AppRunner(app)
     await runner.setup()
@@ -138,11 +153,10 @@ async def run_web():
     await site.start()
     print("🌍 Веб-сервер доступен на http://0.0.0.0:8080")
 
-# 🚀 Запуск
+# 🚀 Запуск бота и веба
 async def main():
     init_db()
     await asyncio.gather(run_web(), dp.start_polling(bot))
 
 if __name__ == "__main__":
-    asyncio.run(main())
-
+    asyncio.run(main()) 
