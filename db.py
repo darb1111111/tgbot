@@ -1,6 +1,7 @@
 import sqlite3
 from pathlib import Path
 import logging
+import time
 
 db_path = Path(__file__).parent / 'appointments.db'
 
@@ -8,41 +9,36 @@ def init_db():
     try:
         with sqlite3.connect(db_path) as conn:
             c = conn.cursor()
+            c.execute("PRAGMA journal_mode=WAL")  # Для уменьшения блокировок
             c.execute('''CREATE TABLE IF NOT EXISTS bookings (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT,
-                date TEXT,
-                time TEXT,
-                service TEXT,
-                phone TEXT
+                name TEXT NOT NULL,
+                date TEXT NOT NULL,
+                time TEXT NOT NULL,
+                service TEXT NOT NULL,
+                phone TEXT NOT NULL
             )''')
             conn.commit()
         logging.info(f"Database initialized at {db_path}")
     except Exception as e:
         logging.error(f"Error initializing database: {e}")
 
-def add_booking(name, date, time, service, phone):
-    try:
-        with sqlite3.connect(db_path) as conn:
-            c = conn.cursor()
-            c.execute(
-                "INSERT INTO bookings (name, date, time, service, phone) VALUES (?, ?, ?, ?, ?)",
-                (name, date, time, service, phone),
-            )
-            conn.commit()
-            # Проверяем добавление
-            c.execute("SELECT last_insert_rowid()")
-            last_id = c.fetchone()[0]
-            c.execute("SELECT * FROM bookings WHERE id = ?", (last_id,))
-            record = c.fetchone()
-            if record:
-                logging.info(f"Booking added successfully: {record}")
-            else:
-                logging.error(f"Booking not found after insert!")
-        return True
-    except Exception as e:
-        logging.error(f"Error adding booking: {e}")
-        return False
+def add_booking(name, date, time, service, phone, retry=3):
+    for attempt in range(retry):
+        try:
+            with sqlite3.connect(db_path, timeout=10) as conn:
+                c = conn.cursor()
+                c.execute("INSERT INTO bookings (name, date, time, service, phone) VALUES (?, ?, ?, ?, ?)",
+                          (name, date, time, service, phone))
+                conn.commit()
+                return True
+        except sqlite3.OperationalError as e:
+            logging.warning(f"Database busy, retrying... ({attempt+1}/{retry})")
+            time.sleep(1)
+        except Exception as e:
+            logging.error(f"Error adding booking: {e}")
+            break
+    return False
 
 def get_all_bookings():
     try:

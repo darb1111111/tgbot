@@ -9,13 +9,12 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import config
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 import logging
-from keep_alive import app  # Твой веб-сервер (предполагается, что есть)
-from db import init_db, add_booking, get_all_bookings  # Импорт функций из db.py
+from keep_alive import app
+from db import init_db, add_booking, get_all_bookings
 
-# Настройка логирования
 logging.basicConfig(
     filename='bot.log',
     level=logging.INFO,
@@ -49,37 +48,30 @@ class BookingForm(StatesGroup):
 async def start(message: types.Message, state: FSMContext):
     await message.answer("👋 Привет! Я бот для онлайн-записи.\nКак тебя зовут?")
     await state.set_state(BookingForm.name)
-    logging.info(f"Пользователь {message.from_user.id} начал процесс записи")
 
 @dp.message(Command("viewbookings"))
 async def view_bookings(message: types.Message):
-    allowed_user_id = config.ADMIN_USER_ID
-    if message.from_user.id != allowed_user_id:
+    if message.from_user.id != config.ADMIN_USER_ID:
         await message.answer("❌ У вас нет доступа к просмотру базы данных!")
-        logging.warning(f"Пользователь {message.from_user.id} пытался получить доступ к записям")
         return
     bookings = get_all_bookings()
     if not bookings:
         await message.answer("📅 Нет записей.")
-        logging.info("Запрошены записи, база пуста")
         return
     text = "📅 Все записи:\n\n"
     for b in bookings:
         text += f"ID: {b[0]}\nИмя: {b[1]}\nУслуга: {b[4]}\nДата: {b[2]}\nВремя: {b[3]}\nТелефон: {b[5]}\n\n"
     await message.answer(text)
-    logging.info(f"Пользователь {message.from_user.id} просмотрел записи")
 
 @dp.message(BookingForm.name)
 async def ask_service(message: types.Message, state: FSMContext):
     name = message.text.strip()
     if not name or len(name) > 50:
-        await message.answer("❌ Пожалуйста, введите корректное имя (не пустое, до 50 символов).")
-        logging.warning(f"Некорректное имя: {message.text}")
+        await message.answer("❌ Введите корректное имя (не более 50 символов).")
         return
     await state.update_data(name=name)
     await message.answer("💅 Какую услугу выбрать?", reply_markup=get_service_keyboard())
     await state.set_state(BookingForm.service)
-    logging.info(f"Пользователь {message.from_user.id} ввел имя: {name}")
 
 @dp.callback_query(lambda c: c.data.startswith("svc_"))
 async def process_service(callback: types.CallbackQuery, state: FSMContext):
@@ -88,7 +80,6 @@ async def process_service(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.answer("📆 На какую дату записаться? (например, 2025-06-01)")
     await state.set_state(BookingForm.date)
     await callback.answer()
-    logging.info(f"Пользователь {callback.from_user.id} выбрал услугу: {services[idx]}")
 
 @dp.message(BookingForm.date)
 async def ask_time(message: types.Message, state: FSMContext):
@@ -96,28 +87,25 @@ async def ask_time(message: types.Message, state: FSMContext):
     timezone = pytz.timezone(config.TIMEZONE)
     try:
         parsed_date = datetime.strptime(date, "%Y-%m-%d")
-        local_date = timezone.localize(parsed_date)
-        if local_date.date() < datetime.now(timezone).date():
-            await message.answer("❌ Нельзя записаться на прошедшую дату! Введите дату, например, 2025-06-01.")
-            logging.warning(f"Попытка записи на прошедшую дату: {date}")
+        if parsed_date.date() < datetime.now(timezone).date():
+            await message.answer("❌ Нельзя записаться на прошедшую дату!")
             return
     except ValueError:
         await message.answer("❌ Неверный формат даты! Введите, например, 2025-06-01.")
-        logging.warning(f"Некорректный формат даты: {message.text}")
         return
     await state.update_data(date=date)
     await message.answer("🕓 Во сколько? (например, 14:30)")
     await state.set_state(BookingForm.time)
-    logging.info(f"Пользователь {message.from_user.id} выбрал дату: {date}")
-
-# **ВАЖНО**: функция check_time_availability отсутствует в твоём коде,
-# нужно её добавить или удалить проверку в ask_time
 
 def check_time_availability(date: str, time: str) -> bool:
-    # Проверка, занято ли время
     bookings = get_all_bookings()
+    try:
+        new_time = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
+    except ValueError:
+        return False
     for b in bookings:
-        if b[2] == date and b[3] == time:
+        booked_time = datetime.strptime(f"{b[2]} {b[3]}", "%Y-%m-%d %H:%M")
+        if b[2] == date and abs((booked_time - new_time).total_seconds()) < 7200:
             return False
     return True
 
@@ -128,24 +116,20 @@ async def ask_phone(message: types.Message, state: FSMContext):
         datetime.strptime(time, "%H:%M")
         data = await state.get_data()
         if not check_time_availability(data.get("date"), time):
-            await message.answer("❌ Это время уже занято! Выберите другое, например, 14:30.")
-            logging.warning(f"Время занято: {data.get('date')} {time}")
+            await message.answer("❌ Это время недоступно! Должно быть минимум 2 часа между записями.")
             return
     except ValueError:
         await message.answer("❌ Неверный формат времени! Введите, например, 14:30.")
-        logging.warning(f"Некорректный формат времени: {message.text}")
         return
     await state.update_data(time=time)
-    await message.answer("📱 Введите свой номер телефона для связи (например, +996123456789):")
+    await message.answer("📱 Введите свой номер телефона (например, +996123456789):")
     await state.set_state(BookingForm.phone)
-    logging.info(f"Пользователь {message.from_user.id} выбрал время: {time}")
 
 @dp.message(BookingForm.phone)
 async def confirm(message: types.Message, state: FSMContext):
     phone = message.text.strip()
     if not phone.startswith('+') or len(phone) < 10 or not phone[1:].isdigit():
         await message.answer("❌ Неверный формат номера! Введите, например, +996123456789.")
-        logging.warning(f"Некорректный номер телефона: {message.text}")
         return
     await state.update_data(phone=phone)
     data = await state.get_data()
@@ -153,10 +137,7 @@ async def confirm(message: types.Message, state: FSMContext):
     if not success:
         await message.answer("❌ Ошибка при сохранении записи. Попробуйте позже.")
         return
-    # Отправка в WhatsApp и резервное уведомление
-    whatsapp_success = await send_to_whatsapp(data["name"], data["date"], data["time"], data["service"], data["phone"])
-    if not whatsapp_success:
-        await send_to_telegram_fallback(data["name"], data["date"], data["time"], data["service"], data["phone"])
+    await send_to_telegram_fallback(**data)
     await message.answer(
         f"✅ Запись подтверждена!\n\n"
         f"Имя: {data['name']}\n"
@@ -164,38 +145,16 @@ async def confirm(message: types.Message, state: FSMContext):
         f"Дата: {data['date']}\n"
         f"Время: {data['time']}\n"
         f"Телефон: {data['phone']}\n\n"
-        f"Спасибо за запись! Мы свяжемся с вами для уточнения деталей. 💬"
+        f"Спасибо за запись! 💬"
     )
-    logging.info(f"Запись подтверждена для {message.from_user.id}: {data}")
     await state.clear()
-
-async def send_to_whatsapp(name, date, time, service, phone):
-    phone_number = config.ADMIN_PHONE
-    apikey = config.apikey
-    message = f"📅 Новая запись:\nИмя: {name}\nУслуга: {service}\nДата: {date}\nВремя: {time}\nТелефон: {phone}"
-    encoded_message = urllib.parse.quote(message)
-    url = f"https://api.callmebot.com/whatsapp.php?phone={phone_number}&text={encoded_message}&apikey={apikey}"
-    async with aiohttp.ClientSession() as session:
-        try:
-            async with session.get(url) as resp:
-                response_text = await resp.text()
-                if resp.status == 200:
-                    logging.info(f"Успешно отправлено в WhatsApp: {message}")
-                    return True
-                else:
-                    logging.error(f"Ошибка отправки в WhatsApp, код {resp.status}: {response_text}")
-                    return False
-        except Exception as e:
-            logging.error(f"Исключение при отправке в WhatsApp: {e}")
-            return False
 
 async def send_to_telegram_fallback(name, date, time, service, phone):
     try:
-        message = f"📅 Новая запись (резерв):\nИмя: {name}\nУслуга: {service}\nДата: {date}\nВремя: {time}\nТелефон: {phone}"
-        await bot.send_message(chat_id=config.ADMIN_USER_ID, text=message)
-        logging.info(f"Резервное сообщение отправлено в Telegram: {message}")
+        text = f"📅 Новая запись:\nИмя: {name}\nУслуга: {service}\nДата: {date}\nВремя: {time}\nТелефон: {phone}"
+        await bot.send_message(chat_id=config.ADMIN_USER_ID, text=text)
     except Exception as e:
-        logging.error(f"Исключение при отправке резервного сообщения в Telegram: {e}")
+        logging.error(f"Ошибка отправки в Telegram: {e}")
 
 async def run_web():
     runner = web.AppRunner(app)
@@ -204,7 +163,7 @@ async def run_web():
     await site.start()
 
 async def main():
-    init_db()  # Инициализация БД
+    init_db()
     await run_web()
     try:
         await dp.start_polling(bot)
