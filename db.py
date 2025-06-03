@@ -4,26 +4,22 @@ import aiomysql
 DB_CONFIG = {
     "host": "localhost",
     "port": 3306,
-    "user": "your_user",
-    "password": "your_password",
-    "db": "your_database",
+    "user": "bot_user",
+    "password": "Bot2025$",
+    "db": "telegram_bot_db",
 }
 
+
 async def init_db():
-    conn = await aiomysql.connect(**DB_CONFIG)
-    async with conn.cursor() as cur:
-        await cur.execute("""
-            CREATE TABLE IF NOT EXISTS bookings (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(50),
-                date DATE,
-                time TIME,
-                service VARCHAR(100),
-                phone VARCHAR(20)
-            )
-        """)
-    await conn.commit()
-    conn.close()
+    global pool
+    pool = await aiomysql.create_pool(
+        host='localhost',
+        port=3306,
+        user='bot_user',
+        password='Bot2025$',
+        db='telegram_bot_db',
+        autocommit=True
+    )
 
 async def add_booking(name, date, time, service, phone):
     try:
