@@ -1,51 +1,49 @@
-import sqlite3
-from pathlib import Path
-import logging
-import time
+import asyncio
+import aiomysql
 
-db_path = Path(__file__).parent / 'appointments.db'
+DB_CONFIG = {
+    "host": "localhost",
+    "port": 3306,
+    "user": "your_user",
+    "password": "your_password",
+    "db": "your_database",
+}
 
-def init_db():
+async def init_db():
+    conn = await aiomysql.connect(**DB_CONFIG)
+    async with conn.cursor() as cur:
+        await cur.execute("""
+            CREATE TABLE IF NOT EXISTS bookings (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(50),
+                date DATE,
+                time TIME,
+                service VARCHAR(100),
+                phone VARCHAR(20)
+            )
+        """)
+    await conn.commit()
+    conn.close()
+
+async def add_booking(name, date, time, service, phone):
     try:
-        with sqlite3.connect(db_path) as conn:
-            c = conn.cursor()
-            c.execute("PRAGMA journal_mode=WAL")  # Для уменьшения блокировок
-            c.execute('''CREATE TABLE IF NOT EXISTS bookings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                date TEXT NOT NULL,
-                time TEXT NOT NULL,
-                service TEXT NOT NULL,
-                phone TEXT NOT NULL
-            )''')
-            conn.commit()
-        logging.info(f"Database initialized at {db_path}")
+        conn = await aiomysql.connect(**DB_CONFIG)
+        async with conn.cursor() as cur:
+            await cur.execute("""
+                INSERT INTO bookings (name, date, time, service, phone)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (name, date, time, service, phone))
+        await conn.commit()
+        conn.close()
+        return True
     except Exception as e:
-        logging.error(f"Error initializing database: {e}")
+        print("Ошибка добавления:", e)
+        return False
 
-def add_booking(name, date, time, service, phone, retry=3):
-    for attempt in range(retry):
-        try:
-            with sqlite3.connect(db_path, timeout=10) as conn:
-                c = conn.cursor()
-                c.execute("INSERT INTO bookings (name, date, time, service, phone) VALUES (?, ?, ?, ?, ?)",
-                          (name, date, time, service, phone))
-                conn.commit()
-                return True
-        except sqlite3.OperationalError as e:
-            logging.warning(f"Database busy, retrying... ({attempt+1}/{retry})")
-            time.sleep(1)
-        except Exception as e:
-            logging.error(f"Error adding booking: {e}")
-            break
-    return False
-
-def get_all_bookings():
-    try:
-        with sqlite3.connect(db_path) as conn:
-            c = conn.cursor()
-            c.execute("SELECT id, name, date, time, service, phone FROM bookings ORDER BY date, time")
-            return c.fetchall()
-    except Exception as e:
-        logging.error(f"Error fetching bookings: {e}")
-        return []
+async def get_all_bookings():
+    conn = await aiomysql.connect(**DB_CONFIG)
+    async with conn.cursor() as cur:
+        await cur.execute("SELECT * FROM bookings")
+        result = await cur.fetchall()
+    conn.close()
+    return result
