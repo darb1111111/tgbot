@@ -6,20 +6,30 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-import config
 from datetime import datetime
 import pytz
 import logging
+import os
+from dotenv import load_dotenv
+
 from keep_alive import app
 from db import init_db, add_booking, get_all_bookings
 
+# Загрузка .env файла
+load_dotenv()
+
+# Логирование
 logging.basicConfig(
     filename='bot.log',
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-bot = Bot(token=config.BOT_TOKEN)
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID", "0"))  # 0 — по умолчанию, если не задано
+TIMEZONE = os.getenv("TIMEZONE", "Asia/Bishkek")
+
+bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
 services = [
@@ -44,19 +54,19 @@ class BookingForm(StatesGroup):
 
 @dp.message(CommandStart())
 async def start(message: types.Message, state: FSMContext):
-    await message.answer("\U0001F44B Привет! Я бот для онлайн-записи.\nКак тебя зовут?")
+    await message.answer("👋 Привет! Я бот для онлайн-записи.\nКак тебя зовут?")
     await state.set_state(BookingForm.name)
 
 @dp.message(Command("viewbookings"))
 async def view_bookings(message: types.Message):
-    if message.from_user.id != config.ADMIN_USER_ID:
-        await message.answer("\u274C У вас нет доступа к просмотру базы данных!")
+    if message.from_user.id != ADMIN_USER_ID:
+        await message.answer("❌ У вас нет доступа к просмотру базы данных!")
         return
     bookings = await get_all_bookings()
     if not bookings:
-        await message.answer("\ud83d\uddd3 Нет записей.")
+        await message.answer("📓 Нет записей.")
         return
-    text = "\ud83d\uddd3 Все записи:\n\n"
+    text = "📓 Все записи:\n\n"
     for b in bookings:
         text += f"ID: {b[0]}\nИмя: {b[1]}\nУслуга: {b[4]}\nДата: {b[2]}\nВремя: {b[3]}\nТелефон: {b[5]}\n\n"
     await message.answer(text)
@@ -65,34 +75,34 @@ async def view_bookings(message: types.Message):
 async def ask_service(message: types.Message, state: FSMContext):
     name = message.text.strip()
     if not name or len(name) > 50:
-        await message.answer("\u274C Введите корректное имя (не более 50 символов).")
+        await message.answer("❌ Введите корректное имя (не более 50 символов).")
         return
     await state.update_data(name=name)
-    await message.answer("\ud83d\udc85 Какую услугу выбрать?", reply_markup=get_service_keyboard())
+    await message.answer("💅 Какую услугу выбрать?", reply_markup=get_service_keyboard())
     await state.set_state(BookingForm.service)
 
 @dp.callback_query(lambda c: c.data.startswith("svc_"))
 async def process_service(callback: types.CallbackQuery, state: FSMContext):
     idx = int(callback.data.replace("svc_", ""))
     await state.update_data(service=services[idx])
-    await callback.message.answer("\ud83d\uddd3 На какую дату записаться? (например, 2025-06-01)")
+    await callback.message.answer("🗓 На какую дату записаться? (например, 2025-06-01)")
     await state.set_state(BookingForm.date)
     await callback.answer()
 
 @dp.message(BookingForm.date)
 async def ask_time(message: types.Message, state: FSMContext):
     date = message.text.strip()
-    timezone = pytz.timezone(config.TIMEZONE)
+    timezone = pytz.timezone(TIMEZONE)
     try:
         parsed_date = datetime.strptime(date, "%Y-%m-%d")
         if parsed_date.date() < datetime.now(timezone).date():
-            await message.answer("\u274C Нельзя записаться на прошедшую дату!")
+            await message.answer("❌ Нельзя записаться на прошедшую дату!")
             return
     except ValueError:
-        await message.answer("\u274C Неверный формат даты! Введите, например, 2025-06-01.")
+        await message.answer("❌ Неверный формат даты! Введите, например, 2025-06-01.")
         return
     await state.update_data(date=date)
-    await message.answer("\ud83d\udd52 Во сколько? (например, 14:30)")
+    await message.answer("🕒 Во сколько? (например, 14:30)")
     await state.set_state(BookingForm.time)
 
 async def check_time_availability(date: str, time: str) -> bool:
@@ -114,36 +124,36 @@ async def ask_phone(message: types.Message, state: FSMContext):
         datetime.strptime(time, "%H:%M")
         data = await state.get_data()
         if not await check_time_availability(data.get("date"), time):
-            await message.answer("\u274C Это время недоступно! Должно быть минимум 2 часа между записями.")
+            await message.answer("❌ Это время недоступно! Должно быть минимум 2 часа между записями.")
             return
     except ValueError:
-        await message.answer("\u274C Неверный формат времени! Введите, например, 14:30.")
+        await message.answer("❌ Неверный формат времени! Введите, например, 14:30.")
         return
     await state.update_data(time=time)
-    await message.answer("\ud83d\udcf1 Введите свой номер телефона (например, +996123456789):")
+    await message.answer("📱 Введите свой номер телефона (например, +996123456789):")
     await state.set_state(BookingForm.phone)
 
 @dp.message(BookingForm.phone)
 async def confirm(message: types.Message, state: FSMContext):
     phone = message.text.strip()
     if not phone.startswith('+') or len(phone) < 10 or not phone[1:].isdigit():
-        await message.answer("\u274C Неверный формат номера! Введите, например, +996123456789.")
+        await message.answer("❌ Неверный формат номера! Введите, например, +996123456789.")
         return
     await state.update_data(phone=phone)
     data = await state.get_data()
     success = await add_booking(data["name"], data["date"], data["time"], data["service"], data["phone"])
     if not success:
-        await message.answer("\u274C Ошибка при сохранении записи. Попробуйте позже.")
+        await message.answer("❌ Ошибка при сохранении записи. Попробуйте позже.")
         return
 
     await message.answer(
-        f"\u2705 Запись подтверждена!\n\n"
+        f"✅ Запись подтверждена!\n\n"
         f"Имя: {data['name']}\n"
         f"Услуга: {data['service']}\n"
         f"Дата: {data['date']}\n"
         f"Время: {data['time']}\n"
         f"Телефон: {data['phone']}\n\n"
-        f"Спасибо за запись! \ud83d\udcac"
+        f"Спасибо за запись! 💬"
     )
     await state.clear()
 
