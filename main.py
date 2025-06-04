@@ -149,8 +149,8 @@ async def ask_phone(message: types.Message, state: FSMContext):
     await message.answer("📱 Введите свой номер телефона (например, +996123456789):")
     await state.set_state(BookingForm.phone)
 
-@dp.message(BookingForm.phone)
-async def confirm(message: types.Message, state: FSMContext):
+@dp.message(BookingForm.phone, content_types=types.ContentType.TEXT)
+async def validate_phone(message: types.Message, state: FSMContext):
     phone = message.text.strip()
     if not phone.startswith('+') or len(phone) < 10 or not phone[1:].isdigit():
         await message.answer("❌ Неверный формат номера! Введите, например, +996123456789.")
