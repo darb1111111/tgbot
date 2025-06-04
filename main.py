@@ -73,6 +73,25 @@ async def send_to_whatsapp(name, date, time, service, phone):
         except Exception as e:
             logging.error(f"Исключение при отправке в WhatsApp: {e}")
 
+async def check_time_availability(date: str, time: str) -> bool:
+    try:
+        new_time = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
+    except ValueError:
+        logging.warning(f"Неверный формат даты или времени при проверке: {date} {time}")
+        return False
+
+    bookings = await get_all_bookings()
+    for b in bookings:
+        try:
+            booked_time = datetime.strptime(f"{b[2]} {b[3]}", "%Y-%m-%d %H:%M")
+            if b[2] == date and abs((booked_time - new_time).total_seconds()) < 7200:
+                logging.info(f"Время занято: {b}")
+                return False
+        except Exception as e:
+            logging.error(f"Ошибка при разборе времени из записи {b}: {e}")
+            continue
+    return True
+
 @dp.message(CommandStart())
 async def start(message: types.Message, state: FSMContext):
     await message.answer("👋 Привет! Я бот для онлайн-записи.\nКак тебя зовут?")
@@ -126,25 +145,37 @@ async def ask_time(message: types.Message, state: FSMContext):
     await message.answer("🕒 Во сколько? (например, 14:30)")
     await state.set_state(BookingForm.time)
 
-async def check_time_availability(date: str, time: str) -> bool:
-    bookings = await get_all_bookings()
-    try:
-        new_time = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
-    except ValueError:
-        return False
-    for b in bookings:
-        booked_time = datetime.strptime(f"{b[2]} {b[3]}", "%Y-%m-%d %H:%M")
-        if b[2] == date and abs((booked_time - new_time).total_seconds()) < 7200:
-            return False
-    return True
+
 
 @dp.message(BookingForm.time)
 async def ask_phone(message: types.Message, state: FSMContext):
     time = message.text.strip()
     data = await state.get_data()
-    if not await check_time_availability(data.get("date"), time):
-        await message.answer("❌ Это время недоступно! Должно быть минимум 2 часа между записями.")
+
+    date = data.get("date")
+    if not date:
+        await message.answer("❌ Дата не найдена. Пожалуйста, начните сначала.")
+        logging.warning("Дата отсутствует в состоянии.")
         return
+
+    logging.info(f"Проверка доступности времени: {date} {time}")
+    print(f"[DEBUG] Проверка времени: дата={date}, время={time}")
+
+    # Проверка формата времени
+    try:
+        datetime.strptime(time, "%H:%M")
+    except ValueError:
+        await message.answer("❌ Неверный формат времени! Введите, например, 14:30.")
+        logging.warning(f"Неверный формат времени: {time}")
+        return
+
+    is_available = await check_time_availability(date, time)
+    print(f"[DEBUG] Время доступно? {is_available}")
+    if not is_available:
+        await message.answer("❌ Это время недоступно! Должно быть минимум 2 часа между записями.")
+        logging.info(f"Недоступное время: {date} {time}")
+        return
+
     await state.update_data(time=time)
     await message.answer("📱 Введите свой номер телефона (например, +996123456789):")
     await state.set_state(BookingForm.phone)
