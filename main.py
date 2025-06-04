@@ -55,8 +55,8 @@ class BookingForm(StatesGroup):
     phone = State()
 
 async def send_to_whatsapp(name, date, time, service):
-    phone = "996709111301"  # Замените на ваш номер в международном формате без '+'
-    apikey = os.getenv("CALLMEBOT_APIKEY")  # Убедитесь, что переменная окружения установлена
+    phone = os.getenv("WHATSAPP_PHONE")  # Замените на ваш номер в международном формате без '+'
+    apikey = os.getenv("API_KEY")  # Убедитесь, что переменная окружения установлена
     message = f"📅 Новая запись:\nИмя: {name}\nУслуга: {service}\nДата: {date}\nВремя: {time}"
     encoded_message = urllib.parse.quote(message)
     url = f"https://api.callmebot.com/whatsapp.php?phone={phone}&text={encoded_message}&apikey={apikey}"
@@ -140,15 +140,12 @@ async def check_time_availability(date: str, time: str) -> bool:
 @dp.message(BookingForm.time)
 async def ask_phone(message: types.Message, state: FSMContext):
     time = message.text.strip()
-    try:
-        datetime.strptime(time, "%H:%M")
-        data = await state.get_data()
-        if not await check_time_availability(data.get("date"), time):
-            await message.answer("❌ Это время недоступно! Должно быть минимум 2 часа между записями.")
-            return
-    except ValueError:
-        await message.answer("❌ Неверный формат времени! Введите, например, 14:30.")
+    data = await state.get_data()
+
+    if not await check_time_availability(data.get("date"), time):
+        await message.answer("❌ Это время недоступно! Должно быть минимум 2 часа между записями.")
         return
+
     await state.update_data(time=time)
     await message.answer("📱 Введите свой номер телефона (например, +996123456789):")
     await state.set_state(BookingForm.phone)
