@@ -161,16 +161,20 @@ async def ask_phone(message: types.Message, state: FSMContext):
     logging.info(f"Проверка доступности времени: {date} {time}")
     print(f"[DEBUG] Проверка времени: дата={date}, время={time}")
 
-    # Проверка формата времени
     try:
         datetime.strptime(time, "%H:%M")
     except ValueError:
         await message.answer("❌ Неверный формат времени! Введите, например, 14:30.")
-        logging.warning(f"Неверный формат времени: {time}")
         return
 
-    is_available = await check_time_availability(date, time)
-    print(f"[DEBUG] Время доступно? {is_available}")
+    try:
+        is_available = await check_time_availability(date, time)
+        print(f"[DEBUG] Время доступно? {is_available}")
+    except Exception as e:
+        logging.error(f"Ошибка при проверке доступности времени: {e}")
+        await message.answer("⚠️ Произошла ошибка при проверке времени. Попробуйте позже.")
+        return
+
     if not is_available:
         await message.answer("❌ Это время недоступно! Должно быть минимум 2 часа между записями.")
         logging.info(f"Недоступное время: {date} {time}")
