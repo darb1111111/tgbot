@@ -11,6 +11,8 @@ import pytz
 import logging
 import os
 from dotenv import load_dotenv
+import aiohttp
+import urllib.parse
 
 from keep_alive import app
 from db import init_db, add_booking, get_all_bookings
@@ -51,6 +53,24 @@ class BookingForm(StatesGroup):
     date = State()
     time = State()
     phone = State()
+
+async def send_to_whatsapp(name, date, time, service):
+    phone = "996709111301"  # Замените на ваш номер в международном формате без '+'
+    apikey = os.getenv("CALLMEBOT_APIKEY")  # Убедитесь, что переменная окружения установлена
+    message = f"📅 Новая запись:\nИмя: {name}\nУслуга: {service}\nДата: {date}\nВремя: {time}"
+    encoded_message = urllib.parse.quote(message)
+    url = f"https://api.callmebot.com/whatsapp.php?phone={phone}&text={encoded_message}&apikey={apikey}"
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(url) as resp:
+                response_text = await resp.text()
+                if resp.status == 200:
+                    print(f"✅ Успешно отправлено в WhatsApp:\n{message}")
+                else:
+                    print(f"❌ Ошибка {resp.status}\n{response_text}")
+        except Exception as e:
+            print(f"❌ Исключение при отправке в WhatsApp: {e}")
+
 
 @dp.message(CommandStart())
 async def start(message: types.Message, state: FSMContext):
@@ -145,6 +165,9 @@ async def confirm(message: types.Message, state: FSMContext):
     if not success:
         await message.answer("❌ Ошибка при сохранении записи. Попробуйте позже.")
         return
+
+    await send_to_whatsapp(data["name"], data["date"], data["time"], data["service"], data["phone"])
+    logging.info(f"Новая запись: {data['name']}, {data['service']}, {data['date']}, {data['time']}, {data['phone']}")
 
     await message.answer(
         f"✅ Запись подтверждена!\n\n"
