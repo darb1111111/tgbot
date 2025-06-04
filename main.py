@@ -77,10 +77,12 @@ async def check_time_availability(date: str, time: str) -> bool:
     try:
         new_time = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
     except ValueError:
-        logging.warning(f"Неверный формат даты или времени при проверке: {date} {time}")
+        logging.warning(f"Неверный формат даты или времени: {date} {time}")
         return False
 
     bookings = await get_all_bookings()
+    logging.debug(f"[DEBUG] Все записи из БД: {bookings}")
+
     for b in bookings:
         try:
             booked_time = datetime.strptime(f"{b[2]} {b[3]}", "%Y-%m-%d %H:%M")
@@ -88,9 +90,9 @@ async def check_time_availability(date: str, time: str) -> bool:
                 logging.info(f"Время занято: {b}")
                 return False
         except Exception as e:
-            logging.error(f"Ошибка при разборе времени из записи {b}: {e}")
-            continue
+            logging.error(f"Ошибка при обработке записи {b}: {e}")
     return True
+
 
 @dp.message(CommandStart())
 async def start(message: types.Message, state: FSMContext):
