@@ -149,7 +149,7 @@ async def ask_phone(message: types.Message, state: FSMContext):
     await message.answer("📱 Введите свой номер телефона (например, +996123456789):")
     await state.set_state(BookingForm.phone)
 
-@dp.message(BookingForm.phone, content_types=types.ContentType.TEXT)
+@dp.message(BookingForm.phone)
 async def validate_phone(message: types.Message, state: FSMContext):
     phone = message.text.strip()
     if not phone.startswith('+') or len(phone) < 10 or not phone[1:].isdigit():
@@ -173,6 +173,7 @@ async def validate_phone(message: types.Message, state: FSMContext):
         f"Спасибо за запись! 💬"
     )
     await state.clear()
+
 
 async def run_web():
     runner = web.AppRunner(app)
