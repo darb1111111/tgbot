@@ -10,30 +10,48 @@ DB_CONFIG = {
     "user": os.getenv("DB_USER"),
     "password": os.getenv("DB_PASSWORD"),
     "db": os.getenv("DB_NAME"),
-    "autocommit": True
+    "minsize": 1,
+    "maxsize": 3,  # снизил, чтобы не превышать лимит
 }
 
 pool = None
 
 async def init_db():
     global pool
-    pool = await aiomysql.create_pool(**DB_CONFIG)
+    if pool is None:
+        pool = await aiomysql.create_pool(**DB_CONFIG)
+        print("Пул подключений создан.")
+    else:
+        print("Пул уже инициализирован.")
 
 async def add_booking(name, date, time, service, phone):
-    try:
-        async with pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("""
-                    INSERT INTO appointments (name, service, date, time, phone)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (name, service, date, time, phone))
-        return True
-    except Exception as e:
-        print("Ошибка добавления:", e)
-        return False
-
-async def get_all_bookings():
+    global pool
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
+            try:
+                await cur.execute(
+                    "INSERT INTO appointments (name, date, time, service, phone) VALUES (%s, %s, %s, %s, %s)",
+                    (name, date, time, service, phone)
+                )
+                await conn.commit()
+                return True
+            except Exception as e:
+                print("Ошибка при сохранении:", e)
+                return False
+
+async def get_all_bookings():
+    global pool
+    async with pool.acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
             await cur.execute("SELECT * FROM appointments")
             return await cur.fetchall()
+
+async def close_db():
+    global pool
+    if pool:
+        pool.close()
+        await pool.wait_closed()
+        pool = None
+        print("База данных закрыта.")
+    else:
+        print("База данных уже закрыта или не инициализирована.")

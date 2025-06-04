@@ -15,7 +15,7 @@ import aiohttp
 import urllib.parse
 
 from keep_alive import app
-from db import init_db, add_booking, get_all_bookings
+from db import init_db, close_db, add_booking, get_all_bookings  # 🔥 добавили close_db
 
 # Загрузка .env файла
 load_dotenv()
@@ -28,7 +28,7 @@ logging.basicConfig(
 )
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID", "0"))  # 0 — по умолчанию, если не задано
+ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID", "0"))
 TIMEZONE = os.getenv("TIMEZONE", "Asia/Bishkek")
 
 bot = Bot(token=BOT_TOKEN)
@@ -54,23 +54,21 @@ class BookingForm(StatesGroup):
     time = State()
     phone = State()
 
-async def send_to_whatsapp(name, date, time, service):
-    phone = os.getenv("WHATSAPP_PHONE")  # Замените на ваш номер в международном формате без '+'
-    apikey = os.getenv("API_KEY")  # Убедитесь, что переменная окружения установлена
-    message = f"📅 Новая запись:\nИмя: {name}\nУслуга: {service}\nДата: {date}\nВремя: {time}"
+async def send_to_whatsapp(name, date, time, service, phone):
+    api_phone = os.getenv("WHATSAPP_PHONE")
+    apikey = os.getenv("API_KEY")
+    message = f"📅 Новая запись:\nИмя: {name}\nУслуга: {service}\nДата: {date}\nВремя: {time}\nТелефон: {phone}"
     encoded_message = urllib.parse.quote(message)
-    url = f"https://api.callmebot.com/whatsapp.php?phone={phone}&text={encoded_message}&apikey={apikey}"
+    url = f"https://api.callmebot.com/whatsapp.php?phone={api_phone}&text={encoded_message}&apikey={apikey}"
     async with aiohttp.ClientSession() as session:
         try:
             async with session.get(url) as resp:
-                response_text = await resp.text()
                 if resp.status == 200:
                     print(f"✅ Успешно отправлено в WhatsApp:\n{message}")
                 else:
-                    print(f"❌ Ошибка {resp.status}\n{response_text}")
+                    print(f"❌ Ошибка {resp.status}: {await resp.text()}")
         except Exception as e:
             print(f"❌ Исключение при отправке в WhatsApp: {e}")
-
 
 @dp.message(CommandStart())
 async def start(message: types.Message, state: FSMContext):
@@ -141,11 +139,9 @@ async def check_time_availability(date: str, time: str) -> bool:
 async def ask_phone(message: types.Message, state: FSMContext):
     time = message.text.strip()
     data = await state.get_data()
-
     if not await check_time_availability(data.get("date"), time):
         await message.answer("❌ Это время недоступно! Должно быть минимум 2 часа между записями.")
         return
-
     await state.update_data(time=time)
     await message.answer("📱 Введите свой номер телефона (например, +996123456789):")
     await state.set_state(BookingForm.phone)
@@ -162,10 +158,8 @@ async def confirm(message: types.Message, state: FSMContext):
     if not success:
         await message.answer("❌ Ошибка при сохранении записи. Попробуйте позже.")
         return
-
     await send_to_whatsapp(data["name"], data["date"], data["time"], data["service"], data["phone"])
     logging.info(f"Новая запись: {data['name']}, {data['service']}, {data['date']}, {data['time']}, {data['phone']}")
-
     await message.answer(
         f"✅ Запись подтверждена!\n\n"
         f"Имя: {data['name']}\n"
@@ -189,6 +183,7 @@ async def main():
     try:
         await dp.start_polling(bot)
     finally:
+        await close_db()  # 🔥 Закрываем соединение с БД
         await bot.session.close()
 
 if __name__ == "__main__":
