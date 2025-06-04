@@ -11,18 +11,19 @@ DB_CONFIG = {
     "password": os.getenv("DB_PASSWORD"),
     "db": os.getenv("DB_NAME"),
     "minsize": 1,
-    "maxsize": 3,  # снизил, чтобы не превышать лимит
+    "maxsize": 3,
 }
 
 pool = None
 
 async def init_db():
     global pool
-    if pool is None:
-        pool = await aiomysql.create_pool(**DB_CONFIG)
-        print("Пул подключений создан.")
-    else:
-        print("Пул уже инициализирован.")
+    if pool is not None:
+        pool.close()
+        await pool.wait_closed()
+        print("Предыдущий пул закрыт.")
+    pool = await aiomysql.create_pool(**DB_CONFIG)
+    print("Пул подключений создан.")
 
 async def add_booking(name, date, time, service, phone):
     global pool

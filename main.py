@@ -15,7 +15,7 @@ import aiohttp
 import urllib.parse
 
 from keep_alive import app
-from db import init_db, close_db, add_booking, get_all_bookings  # 🔥 добавили close_db
+from db import init_db, close_db, add_booking, get_all_bookings
 
 # Загрузка .env файла
 load_dotenv()
@@ -57,18 +57,21 @@ class BookingForm(StatesGroup):
 async def send_to_whatsapp(name, date, time, service, phone):
     api_phone = os.getenv("WHATSAPP_PHONE")
     apikey = os.getenv("API_KEY")
+    if not api_phone or not apikey:
+        logging.error("Отсутствуют WHATSAPP_PHONE или API_KEY")
+        return
     message = f"📅 Новая запись:\nИмя: {name}\nУслуга: {service}\nДата: {date}\nВремя: {time}\nТелефон: {phone}"
     encoded_message = urllib.parse.quote(message)
     url = f"https://api.callmebot.com/whatsapp.php?phone={api_phone}&text={encoded_message}&apikey={apikey}"
     async with aiohttp.ClientSession() as session:
         try:
-            async with session.get(url) as resp:
+            async with session.get(url, timeout=10) as resp:
                 if resp.status == 200:
-                    print(f"✅ Успешно отправлено в WhatsApp:\n{message}")
+                    logging.info(f"Успешно отправлено в WhatsApp: {message}")
                 else:
-                    print(f"❌ Ошибка {resp.status}: {await resp.text()}")
+                    logging.error(f"Ошибка WhatsApp API {resp.status}: {await resp.text()}")
         except Exception as e:
-            print(f"❌ Исключение при отправке в WhatsApp: {e}")
+            logging.error(f"Исключение при отправке в WhatsApp: {e}")
 
 @dp.message(CommandStart())
 async def start(message: types.Message, state: FSMContext):
@@ -178,12 +181,13 @@ async def run_web():
     await site.start()
 
 async def main():
+    await asyncio.sleep(2)  # Wait to prevent connection spikes
     await init_db()
     await run_web()
     try:
         await dp.start_polling(bot)
     finally:
-        await close_db()  # 🔥 Закрываем соединение с БД
+        await close_db()
         await bot.session.close()
 
 if __name__ == "__main__":
