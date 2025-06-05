@@ -33,6 +33,12 @@ async def init_db():
     pool = await aiomysql.create_pool(**DB_CONFIG)
     print("✅ Пул подключений к базе данных создан.")
 
+async def get_db_connection():
+    global pool
+    if pool is None:
+        raise Exception("❌ Пул соединений не инициализирован. Сначала вызовите init_db()")
+    return await pool.acquire()
+
 async def add_booking(name, date, time, service, phone):
     global pool
     async with pool.acquire() as conn:
@@ -54,6 +60,14 @@ async def get_all_bookings():
         async with conn.cursor() as cur:
             await cur.execute("SELECT * FROM appointments")
             return await cur.fetchall()
+
+async def delete_booking_by_id(booking_id: int):
+    global pool
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute("DELETE FROM appointments WHERE id = %s", (booking_id,))
+            await conn.commit()
+            return cursor.rowcount > 0  # True, если запись удалена
 
 async def close_db():
     global pool

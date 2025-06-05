@@ -15,7 +15,7 @@ import aiohttp
 import urllib.parse
 
 from keep_alive import app
-from db import init_db, close_db, add_booking, get_all_bookings
+from db import init_db, close_db, add_booking, get_all_bookings, delete_booking_by_id 
 
 # Загрузка .env файла
 load_dotenv()
@@ -91,6 +91,25 @@ async def view_bookings(message: types.Message):
     for b in bookings:
         text += f"ID: {b[0]}\nИмя: {b[1]}\nУслуга: {b[4]}\nДата: {b[2]}\nВремя: {b[3]}\nТелефон: {b[5]}\n\n"
     await message.answer(text)
+
+@dp.message(Command("delete"))
+async def delete_by_id(message: types.Message):
+    if message.from_user.id != ADMIN_USER_ID:
+        await message.answer("❌ У вас нет доступа к этой команде!")
+        return
+
+    parts = message.text.split()
+    if len(parts) != 2 or not parts[1].isdigit():
+        await message.answer("⚠️ Использование: /delete <ID>\nПример: /delete 12")
+        return
+
+    booking_id = int(parts[1])
+    success = await delete_booking_by_id(booking_id)
+
+    if success:
+        await message.answer(f"✅ Запись с ID {booking_id} успешно удалена.")
+    else:
+        await message.answer(f"❌ Запись с ID {booking_id} не найдена.")
 
 @dp.message(BookingForm.name)
 async def ask_service(message: types.Message, state: FSMContext):
