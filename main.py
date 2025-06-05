@@ -133,22 +133,14 @@ async def check_time_availability(date: str, time: str) -> bool:
         logging.warning(f"Неверный формат даты или времени: {date} {time}")
         return False
 
-    timezone = pytz.timezone(TIMEZONE)
-    now = datetime.now(timezone)
-
-    # ✅ Проверка: время должно быть минимум через 2 часа
-    if new_time < now + timedelta(hours=2):
-        logging.info(f"Попытка записи менее чем за 2 часа: {new_time}")
-        return False
-
     bookings = await get_all_bookings()
     logging.debug(f"[DEBUG] Все записи из БД: {bookings}")
 
     for b in bookings:
         try:
             booked_time = datetime.strptime(f"{b[2]} {b[3]}", "%Y-%m-%d %H:%M")
-            if b[2] == date and abs((booked_time - new_time).total_seconds()) < 7200:
-                logging.info(f"Время занято (разброс менее 2 часов): {b}")
+            if b[2] == date and b[3] == time:
+                logging.info(f"Точное совпадение времени: {b}")
                 return False
         except Exception as e:
             logging.error(f"Ошибка при обработке записи {b}: {e}")
