@@ -73,26 +73,6 @@ async def send_to_whatsapp(name, date, time, service, phone):
         except Exception as e:
             logging.error(f"Исключение при отправке в WhatsApp: {e}")
 
-async def check_time_availability(date: str, time: str) -> bool:
-    try:
-        new_time = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
-    except ValueError:
-        logging.warning(f"Неверный формат даты или времени: {date} {time}")
-        return False
-
-    bookings = await get_all_bookings()
-    logging.debug(f"[DEBUG] Все записи из БД: {bookings}")
-
-    for b in bookings:
-        try:
-            booked_time = datetime.strptime(f"{b[2]} {b[3]}", "%Y-%m-%d %H:%M")
-            if b[2] == date and abs((booked_time - new_time).total_seconds()) < 7200:
-                logging.info(f"Время занято: {b}")
-                return False
-        except Exception as e:
-            logging.error(f"Ошибка при обработке записи {b}: {e}")
-    return True
-
 
 @dp.message(CommandStart())
 async def start(message: types.Message, state: FSMContext):
@@ -147,7 +127,33 @@ async def ask_time(message: types.Message, state: FSMContext):
     await message.answer("🕒 Во сколько? (например, 14:30)")
     await state.set_state(BookingForm.time)
 
+async def check_time_availability(date: str, time: str) -> bool:
+    try:
+        new_time = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
+    except ValueError:
+        logging.warning(f"Неверный формат даты или времени: {date} {time}")
+        return False
 
+    timezone = pytz.timezone(TIMEZONE)
+    now = datetime.now(timezone)
+
+    # ✅ Проверка: время должно быть минимум через 2 часа
+    if new_time < now + timedelta(hours=2):
+        logging.info(f"Попытка записи менее чем за 2 часа: {new_time}")
+        return False
+
+    bookings = await get_all_bookings()
+    logging.debug(f"[DEBUG] Все записи из БД: {bookings}")
+
+    for b in bookings:
+        try:
+            booked_time = datetime.strptime(f"{b[2]} {b[3]}", "%Y-%m-%d %H:%M")
+            if b[2] == date and abs((booked_time - new_time).total_seconds()) < 7200:
+                logging.info(f"Время занято (разброс менее 2 часов): {b}")
+                return False
+        except Exception as e:
+            logging.error(f"Ошибка при обработке записи {b}: {e}")
+    return True
 
 @dp.message(BookingForm.time)
 async def ask_phone(message: types.Message, state: FSMContext):
