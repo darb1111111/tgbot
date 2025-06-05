@@ -73,7 +73,6 @@ async def send_to_whatsapp(name, date, time, service, phone):
         except Exception as e:
             logging.error(f"Исключение при отправке в WhatsApp: {e}")
 
-
 @dp.message(CommandStart())
 async def start(message: types.Message, state: FSMContext):
     await message.answer("👋 Привет! Я бот для онлайн-записи.\nКак тебя зовут?")
@@ -217,6 +216,31 @@ async def validate_phone(message: types.Message, state: FSMContext):
     )
     await state.clear()
 
+
+async def clear_old_bookings():
+    timezone = pytz.timezone(TIMEZONE)
+    cutoff_date = datetime.now(timezone) - timedelta(days=2)
+    cutoff_str = cutoff_date.strftime("%Y-%m-%d")
+
+    # Предполагается, что у тебя есть пул подключений или способ получить соединение
+    # Пример для aiomysql с пулом pool
+    # Если у тебя другой способ работы с БД — замени соответствующим кодом
+    from db import pool  # убедись, что pool импортирован из db.py
+
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("DELETE FROM bookings WHERE date < %s", (cutoff_str,))
+            await conn.commit()
+    logging.info(f"Очистка записей старше {cutoff_str} выполнена.")
+
+# Команда /clear для админа
+@dp.message(Command("clear"))
+async def clear_old_records_command(message: types.Message):
+    if message.from_user.id != ADMIN_USER_ID:
+        await message.answer("❌ У вас нет доступа к этой команде!")
+        return
+    await clear_old_bookings()
+    await message.answer("✅ Старые записи успешно удалены.")
 
 async def run_web():
     runner = web.AppRunner(app)
