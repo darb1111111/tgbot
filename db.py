@@ -1,6 +1,7 @@
 import aiomysql
 import os
 from dotenv import load_dotenv
+from typing import Any
 
 load_dotenv()
 
@@ -26,6 +27,18 @@ async def init_db() -> None:
         await pool.wait_closed()
     try:
         pool = await aiomysql.create_pool(**DB_CONFIG)
+        async with pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("""
+                    CREATE TABLE IF NOT EXISTS appointments (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        name VARCHAR(50),
+                        date VARCHAR(10),
+                        time VARCHAR(5),
+                        service VARCHAR(100),
+                        phone VARCHAR(15)
+                    )
+                """)
         print("База данных инициализирована")
     except Exception as e:
         print(f"Произошла ошибка при инициализации базы данных: {e}, конфигурация: {DB_CONFIG}")
