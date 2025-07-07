@@ -1,0 +1,4 @@
+app = "tg-bot-blewhurry"
+
+[build]
+  # ...
