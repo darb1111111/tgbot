@@ -71,7 +71,7 @@ async def add_booking(name: str, date: str, time: str, service: str, phone: str)
                 await conn.commit()
             return True
     except Exception as e:
-        print(f"Ошибка при добавлении записи: {e}")
+        print(f"❌ Ошибка при сохранении: {e.__class__.__name__}: {e}")
         if 'conn' in locals():
             await conn.rollback()
         return False
