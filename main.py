@@ -241,7 +241,7 @@ async def validate_phone(message: types.Message, state: FSMContext):
         await state.clear()
     except Exception as e:
         logging.error(f"Ошибка при сохранении записи: {e}")
-        await message.answer("⚠️ Ошибка при сохранении записи. Попробуйте позже.")
+        await message.answer("f❌ Ошибка при сохранении: {e.__class__.__name__}: {e}")
         await state.clear()
 
 async def clear_old_bookings():
