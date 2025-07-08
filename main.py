@@ -17,10 +17,8 @@ import urllib.parse
 from keep_alive import app
 from db import init_db, close_db, add_booking, get_all_bookings, delete_booking_by_id 
 
-# Загрузка .env файла
 load_dotenv()
 
-# Логирование
 logging.basicConfig(
     filename='bot.log',
     level=logging.INFO,
@@ -60,7 +58,7 @@ async def send_to_whatsapp(name, date, time, service, phone):
     if not api_phone or not apikey:
         logging.error("Отсутствуют WHATSAPP_PHONE или API_KEY")
         return
-    message = f"📅 Новая запись:\nИмя: {name}\nУслуга: {service}\nДата: {date}\nВремя: {time}\nТелефон: {phone}"
+    message = f"\ud83d\uddd3 Новая запись:\nИмя: {name}\nУслуга: {service}\nДата: {date}\nВремя: {time}\nТелефон: {phone}"
     encoded_message = urllib.parse.quote(message)
     url = f"https://api.callmebot.com/whatsapp.php?phone={api_phone}&text={encoded_message}&apikey={apikey}"
     async with aiohttp.ClientSession() as session:
@@ -75,19 +73,19 @@ async def send_to_whatsapp(name, date, time, service, phone):
 
 @dp.message(CommandStart())
 async def start(message: types.Message, state: FSMContext):
-    await message.answer("👋 Привет! Я бот для онлайн-записи.\nКак тебя зовут?")
+    await message.answer("\ud83d\udc4b Привет! Я бот для онлайн-записи.\nКак тебя зовут?")
     await state.set_state(BookingForm.name)
 
 @dp.message(Command("viewbookings"))
 async def view_bookings(message: types.Message):
     if message.from_user.id != ADMIN_USER_ID:
-        await message.answer("❌ У вас нет доступа к просмотру базы данных!")
+        await message.answer("\u274c У вас нет доступа к просмотру базы данных!")
         return
     bookings = await get_all_bookings()
     if not bookings:
-        await message.answer("📓 Нет записей.")
+        await message.answer("\ud83d\udcd3 Нет записей.")
         return
-    text = "📓 Все записи:\n\n"
+    text = "\ud83d\udcd3 Все записи:\n\n"
     for b in bookings:
         text += f"ID: {b[0]}\nИмя: {b[1]}\nУслуга: {b[4]}\nДата: {b[2]}\nВремя: {b[3]}\nТелефон: {b[5]}\n\n"
     await message.answer(text)
@@ -95,37 +93,38 @@ async def view_bookings(message: types.Message):
 @dp.message(Command("delete"))
 async def delete_by_id(message: types.Message):
     if message.from_user.id != ADMIN_USER_ID:
-        await message.answer("❌ У вас нет доступа к этой команде!")
+        await message.answer("\u274c У вас нет доступа к этой команде!")
         return
 
     parts = message.text.split()
     if len(parts) != 2 or not parts[1].isdigit():
-        await message.answer("⚠️ Использование: /delete <ID>\nПример: /delete 12")
+        await message.answer("\u26a0\ufe0f Использование: /delete <ID>\nПример: /delete 12")
         return
 
     booking_id = int(parts[1])
     success = await delete_booking_by_id(booking_id)
 
     if success:
-        await message.answer(f"✅ Запись с ID {booking_id} успешно удалена.")
+        await message.answer(f"\u2705 Запись с ID {booking_id} успешно удалена.")
     else:
-        await message.answer(f"❌ Запись с ID {booking_id} не найдена.")
+        await message.answer(f"\u274c Запись с ID {booking_id} не найдена.")
 
 @dp.message(BookingForm.name)
 async def ask_service(message: types.Message, state: FSMContext):
     name = message.text.strip()
     if not name or len(name) > 50:
-        await message.answer("❌ Введите корректное имя (не более 50 символов).")
+        await message.answer("\u274c Введите корректное имя (не более 50 символов).")
+        await state.set_state(BookingForm.name)
         return
     await state.update_data(name=name)
-    await message.answer("💅 Какую услугу выбрать?", reply_markup=get_service_keyboard())
+    await message.answer("\ud83d\udc85 Какую услугу выбрать?", reply_markup=get_service_keyboard())
     await state.set_state(BookingForm.service)
 
 @dp.callback_query(lambda c: c.data.startswith("svc_"))
 async def process_service(callback: types.CallbackQuery, state: FSMContext):
     idx = int(callback.data.replace("svc_", ""))
     await state.update_data(service=services[idx])
-    await callback.message.answer("🗓 На какую дату записаться? (например, 2025-06-01)")
+    await callback.message.answer("\ud83d\uddd3 На какую дату записаться? (например, 2025-06-01)")
     await state.set_state(BookingForm.date)
     await callback.answer()
 
@@ -136,122 +135,83 @@ async def ask_time(message: types.Message, state: FSMContext):
     try:
         parsed_date = datetime.strptime(date, "%Y-%m-%d")
         if parsed_date.date() < datetime.now(timezone).date():
-            await message.answer("❌ Нельзя записаться на прошедшую дату!")
+            await message.answer("\u274c Нельзя записаться на прошедшую дату!")
+            await state.set_state(BookingForm.date)
             return
     except ValueError:
-        await message.answer("❌ Неверный формат даты! Введите, например, 2025-06-01.")
+        await message.answer("\u274c Неверный формат даты! Введите, например, 2025-06-01.")
+        await state.set_state(BookingForm.date)
         return
     await state.update_data(date=date)
-    await message.answer("🕒 Во сколько? (например, 14:30)")
+    await message.answer("\ud83d\udd52 Во сколько? (например, 14:30)")
     await state.set_state(BookingForm.time)
 
 async def check_time_availability(date: str, time: str) -> bool:
     try:
         new_time = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
     except ValueError:
-        logging.warning(f"Неверный формат даты или времени: {date} {time}")
         return False
 
     bookings = await get_all_bookings()
-    logging.debug(f"[DEBUG] Все записи из БД: {bookings}")
 
     for b in bookings:
         try:
-            booked_time = datetime.strptime(f"{b[2]} {b[3]}", "%Y-%m-%d %H:%M")
             if b[2] == date and b[3] == time:
-                logging.info(f"Точное совпадение времени: {b}")
                 return False
-        except Exception as e:
-            logging.error(f"Ошибка при обработке записи {b}: {e}")
+        except Exception:
+            continue
     return True
 
 @dp.message(BookingForm.time)
 async def ask_phone(message: types.Message, state: FSMContext):
     time = message.text.strip()
     data = await state.get_data()
-
     date = data.get("date")
-    if not date:
-        await message.answer("❌ Дата не найдена. Пожалуйста, начните сначала.")
-        logging.warning("Дата отсутствует в состоянии.")
-        return
-
-    logging.info(f"Проверка доступности времени: {date} {time}")
-    print(f"[DEBUG] Проверка времени: дата={date}, время={time}")
 
     try:
         datetime.strptime(time, "%H:%M")
     except ValueError:
-        await message.answer("❌ Неверный формат времени! Введите, например, 14:30.")
+        await message.answer("\u274c Неверный формат времени! Введите, например, 14:30.")
+        await state.set_state(BookingForm.time)
         return
 
-    try:
-        is_available = await check_time_availability(date, time)
-        print(f"[DEBUG] Время доступно? {is_available}")
-    except Exception as e:
-        logging.error(f"Ошибка при проверке доступности времени: {e}")
-        await message.answer("⚠️ Произошла ошибка при проверке времени. Попробуйте позже.")
-        return
-
-    if not is_available:
-        await message.answer("❌ Это время недоступно! Должно быть минимум 2 часа между записями.")
-        logging.info(f"Недоступное время: {date} {time}")
+    if not await check_time_availability(date, time):
+        await message.answer("\u274c Это время недоступно! Должно быть минимум 2 часа между записями.")
+        await state.set_state(BookingForm.time)
         return
 
     await state.update_data(time=time)
-    await message.answer("📱 Введите свой номер телефона (например, +996123456789):")
+    await message.answer("\ud83d\udcf1 Введите свой номер телефона (например, +996123456789):")
     await state.set_state(BookingForm.phone)
 
 @dp.message(BookingForm.phone)
 async def validate_phone(message: types.Message, state: FSMContext):
     phone = message.text.strip()
     if not phone.startswith('+') or len(phone) < 10 or not phone[1:].isdigit():
-        await message.answer("❌ Неверный формат номера! Введите, например, +996123456789.")
+        await message.answer("\u274c Неверный формат номера! Введите, например, +996123456789.")
+        await state.set_state(BookingForm.phone)
         return
+
     await state.update_data(phone=phone)
     data = await state.get_data()
     success = await add_booking(data["name"], data["date"], data["time"], data["service"], data["phone"])
+
     if not success:
-        await message.answer("❌ Ошибка при сохранении записи. Попробуйте позже.")
+        await message.answer("\u274c Ошибка при сохранении записи. Попробуйте позже.")
         return
+
     await send_to_whatsapp(data["name"], data["date"], data["time"], data["service"], data["phone"])
-    logging.info(f"Новая запись: {data['name']}, {data['service']}, {data['date']}, {data['time']}, {data['phone']}")
+
     await message.answer(
-        f"✅ Запись подтверждена!\n\n"
+        f"\u2705 Запись подтверждена!\n\n"
         f"Имя: {data['name']}\n"
         f"Услуга: {data['service']}\n"
         f"Дата: {data['date']}\n"
         f"Время: {data['time']}\n"
         f"Телефон: {data['phone']}\n\n"
-        f"Спасибо за запись! 💬"
+        f"Спасибо за запись! \ud83d\udcac"
     )
     await state.clear()
-
-
-async def clear_old_bookings():
-    timezone = pytz.timezone(TIMEZONE)
-    cutoff_date = datetime.now(timezone) - timedelta(days=2)
-    cutoff_str = cutoff_date.strftime("%Y-%m-%d")
-
-    # Предполагается, что у тебя есть пул подключений или способ получить соединение
-    # Пример для aiomysql с пулом pool
-    # Если у тебя другой способ работы с БД — замени соответствующим кодом
-    from db import pool  # убедись, что pool импортирован из db.py
-
-    async with pool.acquire() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute("DELETE FROM bookings WHERE date < %s", (cutoff_str,))
-            await conn.commit()
-    logging.info(f"Очистка записей старше {cutoff_str} выполнена.")
-
-# Команда /clear для админа
-@dp.message(Command("clear"))
-async def clear_old_records_command(message: types.Message):
-    if message.from_user.id != ADMIN_USER_ID:
-        await message.answer("❌ У вас нет доступа к этой команде!")
-        return
-    await clear_old_bookings()
-    await message.answer("✅ Старые записи успешно удалены.")
 
 async def run_web():
     runner = web.AppRunner(app)
@@ -260,7 +220,7 @@ async def run_web():
     await site.start()
 
 async def main():
-    await asyncio.sleep(2)  # Wait to prevent connection spikes
+    await asyncio.sleep(2)
     await init_db()
     await run_web()
     try:
