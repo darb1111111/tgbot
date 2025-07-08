@@ -213,6 +213,19 @@ async def validate_phone(message: types.Message, state: FSMContext):
     )
     await state.clear()
 
+
+def register_handlers(dp: Dispatcher):
+    dp.message.register(start, CommandStart())
+    dp.message.register(view_bookings, Command("viewbookings"))
+    dp.message.register(delete_by_id, Command("delete"))
+    dp.message.register(clear_old_records_command, Command("clear"))
+    dp.message.register(ask_service, BookingForm.name)
+    dp.message.register(ask_time, BookingForm.date)
+    dp.message.register(ask_phone, BookingForm.time)
+    dp.message.register(validate_phone, BookingForm.phone)
+    dp.callback_query.register(process_service, lambda c: c.data.startswith("svc_"))
+
+
 async def run_web():
     runner = web.AppRunner(app)
     await runner.setup()
@@ -223,6 +236,7 @@ async def main():
     await asyncio.sleep(2)
     await init_db()
     await run_web()
+    register_handlers(dp)
     try:
         await dp.start_polling(bot)
     finally:
