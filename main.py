@@ -218,7 +218,6 @@ def register_handlers(dp: Dispatcher):
     dp.message.register(start, CommandStart())
     dp.message.register(view_bookings, Command("viewbookings"))
     dp.message.register(delete_by_id, Command("delete"))
-    dp.message.register(clear_old_records_command, Command("clear"))
     dp.message.register(ask_service, BookingForm.name)
     dp.message.register(ask_time, BookingForm.date)
     dp.message.register(ask_phone, BookingForm.time)
