@@ -107,15 +107,21 @@ async def validate_phone(message: types.Message, state: FSMContext):
     phone = message.text.strip()
     if not is_valid_phone(phone):
         return await message.answer("❌ Формат: +996123456789")
-    data = await state.update_data(phone=phone)
+
+    await state.update_data(phone=phone)
     data = await state.get_data()
-    saved = await add_booking(data["name"], data["date"], data["time"], data["service"], phone)
+
+    saved = await add_booking(
+        data["name"], data["date"], data["time"], data["service"], phone
+    )
     if not saved:
-        return await message.answer("❌ Ошибка при сохранении.")
+        return await message.answer("❌ Ошибка при сохранении. Попробуйте позже.")
+
     await send_to_whatsapp(data["name"], data["date"], data["time"], data["service"], phone)
+
     await message.answer(
-        f"✅ Запись подтверждена!\nИмя: {data['name']}\nУслуга: {data['service']}\nДата: {data['date']}\n"
-        f"Время: {data['time']}\nТелефон: {phone}"
+        f"✅ Запись подтверждена!\n\n"
+        f"Имя: {data['name']}\nУслуга: {data['service']}\nДата: {data['date']}\nВремя: {data['time']}\nТелефон: {phone}"
     )
     await state.clear()
 
