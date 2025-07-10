@@ -43,7 +43,7 @@ def is_valid_phone(phone: str) -> bool:
 
 async def send_to_whatsapp(name: str, date: str, time: str, service: str, phone: str) -> bool:
     api_phone = os.getenv("WHATSAPP_PHONE")
-    api_key = os.getenv("WHATSAPP_API_KEY")  # Переименовано для консистентности
+    api_key = os.getenv("WHATSAPP_API_KEY")
     if not api_phone or not api_key:
         print("Ошибка: WHATSAPP_PHONE или WHATSAPP_API_KEY не установлены")
         return False
@@ -150,8 +150,17 @@ async def validate_phone(message: types.Message, state: FSMContext):
         return
 
     data = await state.get_data()
+    required_fields = ["name", "service", "date", "time"]
+    if not all(field in data for field in required_fields):
+        missing = [field for field in required_fields if field not in data]
+        print(f"Ошибка: отсутствуют поля в FSM: {missing}")
+        await message.answer(f"❌ Ошибка: отсутствуют данные ({', '.join(missing)}). Попробуйте начать заново.")
+        await state.clear()
+        return
+
     try:
-        success = await add_booking(data["name"], data["date"], data["time"], data["service"], phone)
+        # Исправлен порядок аргументов для add_booking
+        success = await add_booking(data["name"], data["service"], data["date"], data["time"], phone)
         if not success:
             print("Ошибка сохранения записи в базе данных")
             await message.answer("❌ Ошибка при сохранении записи. Попробуйте позже.")
