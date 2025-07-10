@@ -1,26 +1,28 @@
 import asyncio
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import CommandStart, Command
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from datetime import datetime
 import logging
 import os
 import re
-import aiohttp
 import urllib.parse
+from datetime import datetime
+
+import aiohttp
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters import CommandStart, Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from dotenv import load_dotenv
+
 from db import init_db, close_db, add_booking, get_all_bookings, delete_booking_by_id
 
 # --- Настройки ---
+
 load_dotenv()
 logging.basicConfig(level=logging.WARNING)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID", "0"))
-TIMEZONE = os.getenv("TIMEZONE", "Asia/Bishkek")
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
@@ -34,6 +36,7 @@ services = [
 ]
 
 # --- Утилиты ---
+
 def get_service_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=s, callback_data=f"svc_{i}")] for i, s in enumerate(services)
@@ -47,19 +50,25 @@ async def send_to_whatsapp(name, date, time, service, phone):
     apikey = os.getenv("API_KEY")
     if not api_phone or not apikey:
         return
-    message = f"📅 Новая запись:\nИмя: {name}\nУслуга: {service}\nДата: {date}\nВремя: {time}\nТелефон: {phone}"
+
+    message = (
+        f"🕵 Новая запись:\nИмя: {name}\nУслуга: {service}\nДата: {date}\nВремя: {time}\nТелефон: {phone}"
+    )
     url = (
-        f"https://api.callmebot.com/whatsapp.php?phone={api_phone}" 
+        f"https://api.callmebot.com/whatsapp.php?phone={api_phone}"
         f"&text={urllib.parse.quote(message)}&apikey={apikey}"
     )
+
     try:
-        async with aiohttp.ClientSession() as session, session.get(url, timeout=10) as resp:
-            if resp.status != 200:
-                logging.warning(f"Ошибка WhatsApp API {resp.status}: {await resp.text()}")
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=10) as resp:
+                if resp.status != 200:
+                    logging.warning(f"Ошибка WhatsApp API {resp.status}: {await resp.text()}")
     except Exception as e:
         logging.warning(f"Ошибка WhatsApp API: {e}")
 
-# --- Состояния ---
+# --- Машина состояний ---
+
 class BookingForm(StatesGroup):
     name = State()
     service = State()
@@ -67,7 +76,8 @@ class BookingForm(StatesGroup):
     time = State()
     phone = State()
 
-# --- Хэндлеры ---
+# --- Обработчики бота ---
+
 async def start(message: types.Message, state: FSMContext):
     await message.answer("👋 Привет! Я бот для онлайн-записи.\nКак тебя зовут?")
     await state.set_state(BookingForm.name)
@@ -137,7 +147,8 @@ async def validate_phone(message: types.Message, state: FSMContext):
     )
     await state.clear()
 
-# --- Админ ---
+# --- Админ команды ---
+
 async def view_bookings(message: types.Message):
     if message.from_user.id != ADMIN_USER_ID:
         return await message.answer("❌ Нет доступа.")
@@ -147,7 +158,10 @@ async def view_bookings(message: types.Message):
         return await message.answer("📓 Нет записей.")
 
     text = "\n\n".join(
-        [f"ID: {b[0]}\nИмя: {b[1]}\nУслуга: {b[4]}\nДата: {b[2]}\nВремя: {b[3]}\nТелефон: {b[5]}" for b in bookings]
+        [
+            f"ID: {b[0]}\nИмя: {b[1]}\nУслуга: {b[4]}\nДата: {b[2]}\nВремя: {b[3]}\nТелефон: {b[5]}"
+            for b in bookings
+        ]
     )
     await message.answer(f"📓 Все записи:\n\n{text}")
 
@@ -165,7 +179,8 @@ async def delete_by_id(message: types.Message):
     else:
         await message.answer("❌ Запись не найдена.")
 
-# --- Регистрация ---
+# --- Регистрация обработчиков ---
+
 def register_handlers():
     dp.message.register(start, CommandStart())
     dp.message.register(ask_service, BookingForm.name)
@@ -177,6 +192,7 @@ def register_handlers():
     dp.message.register(delete_by_id, Command("delete"))
 
 # --- Запуск ---
+
 async def main():
     await init_db()
     register_handlers()
