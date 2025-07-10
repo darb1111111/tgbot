@@ -9,36 +9,36 @@ from aiogram.types import Update
 from handlers import register_handlers
 from db import init_db, close_db
 
-# Load environment variables
+# Загрузка переменных окружения
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("main")
 
-# Retrieve environment variables
+# Получение переменных окружения
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "supersecret")
 
-# Validate environment variables
+# Проверка переменных окружения
 if not BOT_TOKEN or not WEBHOOK_URL:
-    logger.error("BOT_TOKEN or WEBHOOK_URL not set in environment variables")
-    raise ValueError("Missing required environment variables")
+    logger.error("BOT_TOKEN или WEBHOOK_URL не установлены в переменных окружения")
+    raise ValueError("Отсутствуют необходимые переменные окружения")
 
-# Initialize Bot, Dispatcher, and FastAPI
+# Инициализация Bot, Dispatcher и FastAPI
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 app = FastAPI()
 
-# FastAPI Events
+# События FastAPI
 @app.on_event("startup")
 async def on_startup():
     try:
         await init_db()
         register_handlers(dp)
         await bot.set_webhook(url=f"{WEBHOOK_URL}/webhook", secret_token=WEBHOOK_SECRET)
-        logger.info("Webhook set successfully")
+        logger.info("Вебхук успешно установлен")
     except Exception as e:
-        logger.error(f"Startup failed: {e}")
+        logger.error(f"Ошибка при запуске: {e}")
         raise
 
 @app.on_event("shutdown")
@@ -46,23 +46,23 @@ async def on_shutdown():
     try:
         await bot.delete_webhook()
         await close_db()
-        logger.info("Webhook deleted and database connection closed")
+        logger.info("Вебхук удален и соединение с базой данных закрыто")
     except Exception as e:
-        logger.error(f"Shutdown failed: {e}")
+        logger.error(f"Ошибка при завершении работы: {e}")
 
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
     try:
-        # Verify webhook secret
+        # Проверка секрета вебхука
         if request.headers.get("X-Telegram-Bot-Api-Secret-Token") != WEBHOOK_SECRET:
-            logger.warning("Invalid webhook secret")
-            raise HTTPException(status_code=403, detail="Invalid webhook secret")
-        
-        # Process update
+            logger.warning("Недействительный секрет вебхука")
+            raise HTTPException(status_code=403, detail="Недействительный секрет вебхука")
+
+        # Обработка обновления
         data = await request.json()
         update = Update.model_validate(data)
         await dp.feed_update(bot, update)
         return {"ok": True}
     except Exception as e:
-        logger.error(f"Webhook processing failed: {e}")
+        logger.error(f"Ошибка обработки вебхука: {e}")
         return {"ok": False}
