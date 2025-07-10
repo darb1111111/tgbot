@@ -42,7 +42,7 @@ async def init_db():
                 """)
                 print("✅ База данных инициализирована.")
     except Exception as e:
-        print(f"❌ Ошибка инициализации БД: {type(e).name}: {e}")
+        print(f"❌ Ошибка инициализации БД: {type(e)._name_}: {e}")
         raise
 
 async def close_db():
@@ -67,7 +67,7 @@ async def add_booking(name, service, date, time, phone):
                 await conn.commit()
                 return True
     except Exception as e:
-        print(f"❌ Ошибка при добавлении записи: {type(e).name}: {e}")
+        print(f"❌ Ошибка при добавлении записи: {type(e)._name_}: {e}")
         return False
 
 async def get_all_bookings():

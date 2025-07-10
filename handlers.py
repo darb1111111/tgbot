@@ -11,7 +11,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-from db import add_booking, get_all_bookings, delete_booking_by_id, save_draft, get_draft, clear_draft
+from db import add_booking, get_all_bookings, delete_booking_by_id
 
 class BookingForm(StatesGroup):
     name = State()
