@@ -108,6 +108,7 @@ async def validate_phone(message: types.Message, state: FSMContext):
     if not is_valid_phone(phone):
         return await message.answer("❌ Формат: +996123456789")
     data = await state.update_data(phone=phone)
+    data = await state.get_data()
     saved = await add_booking(data["name"], data["date"], data["time"], data["service"], phone)
     if not saved:
         return await message.answer("❌ Ошибка при сохранении.")
