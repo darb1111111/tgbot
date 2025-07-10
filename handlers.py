@@ -1,4 +1,3 @@
-# handlers.py
 import re
 import os
 import urllib.parse
@@ -6,14 +5,14 @@ from datetime import datetime
 
 import aiohttp
 from aiogram import types, Dispatcher
+from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.filters import CommandStart, Command
 
 from db import add_booking, get_all_bookings, delete_booking_by_id
 
-# --- FSM States ---
+# FSM States
 class BookingForm(StatesGroup):
     name = State()
     service = State()
@@ -21,7 +20,7 @@ class BookingForm(StatesGroup):
     time = State()
     phone = State()
 
-# --- Services ---
+# Services
 services = [
     "Наращивание ресниц",
     "Ламинирование ресниц",
@@ -30,61 +29,92 @@ services = [
     "Мусульманская коррекция",
 ]
 
-# --- Utilities ---
+# Utilities
 def get_service_keyboard():
     return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text=s, callback_data=f"svc_{i}")] for i, s in enumerate(services)]
+        inline_keyboard=[
+            [InlineKeyboardButton(text=service, callback_data=f"svc_{idx}")]
+            for idx, service in enumerate(services)
+        ]
     )
 
 def is_valid_phone(phone: str) -> bool:
-    return re.fullmatch(r"\+996\\d{9}", phone) is not None
+    return bool(re.fullmatch(r"\+996\d{9}", phone))
 
-async def send_to_whatsapp(name, date, time, service, phone):
+async def send_to_whatsapp(name: str, date: str, time: str, service: str, phone: str) -> bool:
     api_phone = os.getenv("WHATSAPP_PHONE")
-    apikey = os.getenv("API_KEY")
-    if not api_phone or not apikey:
-        return
-    message = f"🕵 Новая запись:\nИмя: {name}\nУслуга: {service}\nДата: {date}\nВремя: {time}\nТелефон: {phone}"
-    url = f"https://api.callmebot.com/whatsapp.php?phone={api_phone}&text={urllib.parse.quote(message)}&apikey={apikey}"
+    api_key = os.getenv("WHATSAPP_API_KEY")  # Переименовано для консистентности
+    if not api_phone or not api_key:
+        print("Ошибка: WHATSAPP_PHONE или WHATSAPP_API_KEY не установлены")
+        return False
+
+    message = (
+        f"🕵 Новая запись:\n"
+        f"Имя: {name}\n"
+        f"Услуга: {service}\n"
+        f"Дата: {date}\n"
+        f"Время: {time}\n"
+        f"Телефон: {phone}"
+    )
+    encoded_message = urllib.parse.quote(message)
+    url = f"https://api.callmebot.com/whatsapp.php?phone={api_phone}&text={encoded_message}&apikey={api_key}"
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, timeout=10) as resp:
                 if resp.status != 200:
                     print(f"Ошибка WhatsApp API {resp.status}: {await resp.text()}")
+                    return False
+                return True
     except Exception as e:
         print(f"Ошибка WhatsApp API: {e}")
+        return False
 
-# --- Handlers ---
+# Handlers
 async def start(message: types.Message, state: FSMContext):
-    await message.answer("👋 Привет! Я бот для онлайн-записи.\nКак тебя зовут?")
+    await state.clear()
+    await message.answer(
+        "👋 Привет! Я бот для онлайн-записи.\nКак тебя зовут?",
+        reply_markup=types.ReplyKeyboardRemove()
+    )
     await state.set_state(BookingForm.name)
 
 async def ask_service(message: types.Message, state: FSMContext):
     name = message.text.strip()
     if not name or len(name) > 50 or not any(c.isalpha() for c in name):
-        return await message.answer("❌ Введите корректное имя.")
+        await message.answer("❌ Введите корректное имя (только буквы, до 50 символов).")
+        return
     await state.update_data(name=name)
     await message.answer("💅 Какую услугу выбрать?", reply_markup=get_service_keyboard())
     await state.set_state(BookingForm.service)
 
 async def process_service(callback: types.CallbackQuery, state: FSMContext):
-    idx = int(callback.data.replace("svc_", ""))
-    await state.update_data(service=services[idx])
-    await callback.message.answer("🗓 На какую дату записаться? (ГГГГ-ММ-ДД)")
-    await state.set_state(BookingForm.date)
-    await callback.answer()
+    try:
+        idx = int(callback.data.replace("svc_", ""))
+        if idx < 0 or idx >= len(services):
+            await callback.message.answer("❌ Неверная услуга.")
+            await callback.answer()
+            return
+        await state.update_data(service=services[idx])
+        await callback.message.answer("🗓 На какую дату записаться? (Формат: ГГГГ-ММ-ДД, например, 2025-07-10)")
+        await state.set_state(BookingForm.date)
+        await callback.answer()
+    except ValueError:
+        await callback.message.answer("❌ Ошибка выбора услуги.")
+        await callback.answer()
 
 async def ask_time(message: types.Message, state: FSMContext):
     date = message.text.strip()
     try:
         parsed_date = datetime.strptime(date, "%Y-%m-%d")
         if parsed_date.date() < datetime.now().date():
-            return await message.answer("❌ Дата в прошлом.")
+            await message.answer("❌ Дата не может быть в прошлом.")
+            return
     except ValueError:
-        return await message.answer("❌ Формат: 2025-07-10")
+        await message.answer("❌ Неверный формат даты. Используйте ГГГГ-ММ-ДД (например, 2025-07-10).")
+        return
     await state.update_data(date=date)
-    await message.answer("🕒 Во сколько? (например, 14:30)")
+    await message.answer("🕒 Во сколько? (Формат: ЧЧ:ММ, например, 14:30)")
     await state.set_state(BookingForm.time)
 
 async def ask_phone(message: types.Message, state: FSMContext):
@@ -92,64 +122,100 @@ async def ask_phone(message: types.Message, state: FSMContext):
     try:
         parsed_time = datetime.strptime(time, "%H:%M").time()
         if parsed_time.hour < 8 or parsed_time.hour > 21:
-            return await message.answer("❌ Запись с 08:00 до 21:00.")
+            await message.answer("❌ Запись возможна с 08:00 до 21:00.")
+            return
     except ValueError:
-        return await message.answer("❌ Формат: 14:30")
+        await message.answer("❌ Неверный формат времени. Используйте ЧЧ:ММ (например, 14:30).")
+        return
+
     data = await state.get_data()
-    bookings = await get_all_bookings()
-    if any(b[2] == data["date"] and b[3] == time for b in bookings):
-        return await message.answer("❌ Это время занято!")
+    try:
+        bookings = await get_all_bookings()
+        if any(booking[2] == data["date"] and booking[3] == time for booking in bookings):
+            await message.answer("❌ Это время уже занято!")
+            return
+    except Exception as e:
+        print(f"Ошибка проверки занятости времени: {e}")
+        await message.answer("❌ Ошибка проверки времени. Попробуйте позже.")
+        return
+
     await state.update_data(time=time)
-    await message.answer("📱 Введите телефон (например, +996123456789):")
+    await message.answer("📱 Введите номер телефона (Формат: +996123456789):")
     await state.set_state(BookingForm.phone)
 
 async def validate_phone(message: types.Message, state: FSMContext):
     phone = message.text.strip()
     if not is_valid_phone(phone):
-        return await message.answer("❌ Формат: +996123456789")
+        await message.answer("❌ Неверный формат номера. Используйте +996 и 9 цифр (например, +996123456789).")
+        return
 
-    await state.update_data(phone=phone)
     data = await state.get_data()
+    try:
+        success = await add_booking(data["name"], data["date"], data["time"], data["service"], phone)
+        if not success:
+            print("Ошибка сохранения записи в базе данных")
+            await message.answer("❌ Ошибка при сохранении записи. Попробуйте позже.")
+            return
 
-    saved = await add_booking(
-        data["name"], data["date"], data["time"], data["service"], phone
-    )
-    if not saved:
-        return await message.answer("❌ Ошибка при сохранении. Попробуйте позже.")
+        if not await send_to_whatsapp(data["name"], data["date"], data["time"], data["service"], phone):
+            print(f"Не удалось отправить уведомление в WhatsApp для {phone}")
 
-    await send_to_whatsapp(data["name"], data["date"], data["time"], data["service"], phone)
-
-    await message.answer(
-        f"✅ Запись подтверждена!\n\n"
-        f"Имя: {data['name']}\nУслуга: {data['service']}\nДата: {data['date']}\nВремя: {data['time']}\nТелефон: {phone}"
-    )
-    await state.clear()
+        await message.answer(
+            f"✅ Запись подтверждена!\n\n"
+            f"Имя: {data['name']}\n"
+            f"Услуга: {data['service']}\n"
+            f"Дата: {data['date']}\n"
+            f"Время: {data['time']}\n"
+            f"Телефон: {phone}"
+        )
+        await state.clear()
+    except Exception as e:
+        print(f"Ошибка при создании записи: {e}")
+        await message.answer(f"❌ Ошибка при создании записи: {e}")
 
 async def view_bookings(message: types.Message):
-    if message.from_user.id != int(os.getenv("ADMIN_USER_ID", "0")):
-        return await message.answer("❌ Нет доступа.")
-    bookings = await get_all_bookings()
-    if not bookings:
-        return await message.answer("📓 Нет записей.")
-    text = "\n\n".join(
-        f"ID: {b[0]}\nИмя: {b[1]}\nУслуга: {b[4]}\nДата: {b[2]}\nВремя: {b[3]}\nТелефон: {b[5]}"
-        for b in bookings
-    )
-    await message.answer(f"📓 Все записи:\n\n{text}")
+    admin_id = os.getenv("ADMIN_USER_ID", "0")
+    if str(message.from_user.id) != admin_id:
+        await message.answer("❌ Нет доступа. Только администратор может просматривать записи.")
+        return
+
+    try:
+        bookings = await get_all_bookings()
+        if not bookings:
+            await message.answer("📓 Нет активных записей.")
+            return
+
+        text = "\n\n".join(
+            f"ID: {b[0]}\nИмя: {b[1]}\nУслуга: {b[4]}\nДата: {b[2]}\nВремя: {b[3]}\nТелефон: {b[5]}"
+            for b in bookings
+        )
+        await message.answer(f"📓 Все записи:\n\n{text}")
+    except Exception as e:
+        print(f"Ошибка при получении записей: {e}")
+        await message.answer("❌ Ошибка при получении записей.")
 
 async def delete_by_id(message: types.Message):
-    if message.from_user.id != int(os.getenv("ADMIN_USER_ID", "0")):
-        return await message.answer("❌ Нет доступа.")
+    admin_id = os.getenv("ADMIN_USER_ID", "0")
+    if str(message.from_user.id) != admin_id:
+        await message.answer("❌ Нет доступа. Только администратор может удалять записи.")
+        return
+
     parts = message.text.split()
     if len(parts) != 2 or not parts[1].isdigit():
-        return await message.answer("⚠ /delete <ID>")
-    booking_id = int(parts[1])
-    if await delete_booking_by_id(booking_id):
-        await message.answer(f"✅ Удалено: {booking_id}")
-    else:
-        await message.answer("❌ Запись не найдена.")
+        await message.answer("⚠ Используйте формат: /delete <ID>")
+        return
 
-# --- Регистрация всех хендлеров ---
+    booking_id = int(parts[1])
+    try:
+        if await delete_booking_by_id(booking_id):
+            await message.answer(f"✅ Запись с ID {booking_id} удалена.")
+        else:
+            await message.answer("❌ Запись не найдена.")
+    except Exception as e:
+        print(f"Ошибка при удалении записи: {e}")
+        await message.answer(f"❌ Ошибка при удалении записи: {e}")
+
+# Register Handlers
 def register_handlers(dp: Dispatcher):
     dp.message.register(start, CommandStart())
     dp.message.register(ask_service, BookingForm.name)
