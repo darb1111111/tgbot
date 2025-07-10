@@ -1,5 +1,5 @@
-aiogram==3.13.1
-aiohttp==3.10.5
-pytz==2024.2
-aiomysql==0.2.0
+aiogram
+fastapi
+uvicorn
 python-dotenv
+aiohttp
