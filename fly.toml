@@ -1,4 +1,5 @@
 app = "tgbot-lbqj1g"
+
 [env]
 PORT = "8080"
 
@@ -13,3 +14,8 @@ PORT = "8080"
   [[services.ports]]
     port = 443
     handlers = ["http", "tls"]
+
+  [services.concurrency]
+    hard_limit = 20
+    soft_limit = 15
+    type = "requests"
