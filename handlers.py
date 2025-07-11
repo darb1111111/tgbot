@@ -143,8 +143,9 @@ async def ask_phone(message: types.Message, state: FSMContext):
             _, _, b_date, b_time, *_ = b
             exist_start = datetime.strptime(f"{b_date} {str(b_time)[:5]}", "%Y-%m-%d %H:%M")
             exist_end = exist_start + timedelta(hours=2)
+
             if new_start < exist_end and exist_start < new_end:
-                await message.answer(f"❌ Пересечение с записью в {str(b_time)[:5]}. Выберите другое время.")
+                await message.answer(f"❌ Пересечение с записью: {b_date} {str(b_time)[:5]} - выберите другое время.")
                 return
     except Exception as e:
         print(f"❌ Ошибка проверки времени: {e}")
