@@ -54,7 +54,7 @@ async def send_to_whatsapp(name: str, date: str, time: str, service: str, phone:
         return False
 
     message = (
-        f"\U0001F575 Новая запись:\n"
+        f"🕵️ Новая запись:\n"
         f"Имя: {name}\n"
         f"Услуга: {service}\n"
         f"Дата: {date}\n"
@@ -79,7 +79,7 @@ async def start(message: types.Message, state: FSMContext):
     await state.set_state(BookingForm.name)
     await state.update_data(name=None, service=None, date=None, time=None)
     await message.answer(
-        "\U0001F44B Привет! Я бот для онлайн-записи.\nКак тебя зовут?",
+        "👋 Привет! Я бот для онлайн-записи.\nКак тебя зовут?",
         reply_markup=types.ReplyKeyboardRemove()
     )
 
@@ -91,7 +91,7 @@ async def ask_service(message: types.Message, state: FSMContext):
         return
     await state.update_data(name=name)
     await state.set_state(BookingForm.service)
-    await message.answer("\U0001F485 Какую услугу выбрать?", reply_markup=get_service_keyboard())
+    await message.answer("💅 Какую услугу выбрать?", reply_markup=get_service_keyboard())
 
 
 async def process_service(callback: types.CallbackQuery, state: FSMContext):
