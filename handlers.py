@@ -12,7 +12,6 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from db import add_booking, get_all_bookings, delete_booking_by_id
 
-
 # FSM States
 class BookingForm(StatesGroup):
     name = State()
@@ -20,7 +19,6 @@ class BookingForm(StatesGroup):
     date = State()
     time = State()
     phone = State()
-
 
 # Services
 services = [
@@ -31,7 +29,6 @@ services = [
     "Мусульманская коррекция",
 ]
 
-
 # Utilities
 def get_service_keyboard():
     return InlineKeyboardMarkup(
@@ -41,10 +38,8 @@ def get_service_keyboard():
         ]
     )
 
-
 def is_valid_phone(phone: str) -> bool:
     return bool(re.fullmatch(r"\+996\d{9}", phone))
-
 
 async def send_to_whatsapp(name: str, date: str, time: str, service: str, phone: str) -> bool:
     api_phone = os.getenv("WHATSAPP_PHONE")
@@ -72,7 +67,6 @@ async def send_to_whatsapp(name: str, date: str, time: str, service: str, phone:
         print(f"Ошибка WhatsApp API: {e}")
         return False
 
-
 # Handlers
 async def start(message: types.Message, state: FSMContext):
     await state.clear()
@@ -83,7 +77,6 @@ async def start(message: types.Message, state: FSMContext):
         reply_markup=types.ReplyKeyboardRemove()
     )
 
-
 async def ask_service(message: types.Message, state: FSMContext):
     name = message.text.strip()
     if not name or len(name) > 50 or not any(c.isalpha() for c in name):
@@ -92,7 +85,6 @@ async def ask_service(message: types.Message, state: FSMContext):
     await state.update_data(name=name)
     await state.set_state(BookingForm.service)
     await message.answer("💅 Какую услугу выбрать?", reply_markup=get_service_keyboard())
-
 
 async def process_service(callback: types.CallbackQuery, state: FSMContext):
     try:
@@ -105,7 +97,6 @@ async def process_service(callback: types.CallbackQuery, state: FSMContext):
         await callback.message.answer("🗓 На какую дату записаться? (Формат: ГГГГ-ММ-ДД, например, 2025-07-10)")
     finally:
         await callback.answer()
-
 
 async def ask_time(message: types.Message, state: FSMContext):
     date = message.text.strip()
@@ -121,7 +112,6 @@ async def ask_time(message: types.Message, state: FSMContext):
     await state.update_data(date=date)
     await state.set_state(BookingForm.time)
     await message.answer("🕒 Во сколько? (Формат: ЧЧ:ММ, например, 14:30)")
-
 
 async def ask_phone(message: types.Message, state: FSMContext):
     time_str = message.text.strip()
@@ -144,14 +134,26 @@ async def ask_phone(message: types.Message, state: FSMContext):
     try:
         new_start = datetime.strptime(f"{date} {time_str}", "%Y-%m-%d %H:%M")
         new_end = new_start + timedelta(hours=2)
-        for b in await get_all_bookings():
-            b_date, b_time = b[2], str(b[3])[:5]
+
+        bookings = await get_all_bookings()
+
+        for b in bookings:
+            booking_id, name, b_date, b_time, service, phone = b
+
             if b_date != date:
                 continue
-            exist_start = datetime.strptime(f"{b_date} {b_time}", "%Y-%m-%d %H:%M")
+
+            # нормализуем b_time
+            if hasattr(b_time, 'strftime'):
+                b_time_str = b_time.strftime("%H:%M")
+            else:
+                b_time_str = str(b_time)[:5]
+
+            exist_start = datetime.strptime(f"{b_date} {b_time_str}", "%Y-%m-%d %H:%M")
             exist_end = exist_start + timedelta(hours=2)
+
             if new_start < exist_end and exist_start < new_end:
-                await message.answer(f"❌ Пересечение с другой записью в {b_time}. Выберите другое время.")
+                await message.answer(f"❌ Пересечение с другой записью в {b_time_str}. Выберите другое время.")
                 return
     except Exception as e:
         print(f"Ошибка проверки: {e}")
@@ -161,7 +163,6 @@ async def ask_phone(message: types.Message, state: FSMContext):
     await state.update_data(time=time_str)
     await state.set_state(BookingForm.phone)
     await message.answer("📱 Введите номер телефона (Формат: +996123456789):")
-
 
 async def validate_phone(message: types.Message, state: FSMContext):
     phone = message.text.strip()
@@ -192,7 +193,6 @@ async def validate_phone(message: types.Message, state: FSMContext):
     )
     await state.clear()
 
-
 async def view_bookings(message: types.Message):
     admin_id = os.getenv("ADMIN_USER_ID", "0")
     if str(message.from_user.id) != admin_id:
@@ -210,7 +210,6 @@ async def view_bookings(message: types.Message):
     )
     await message.answer(f"📓 Все записи:\n\n{text}")
 
-
 async def delete_by_id(message: types.Message):
     admin_id = os.getenv("ADMIN_USER_ID", "0")
     if str(message.from_user.id) != admin_id:
@@ -227,7 +226,6 @@ async def delete_by_id(message: types.Message):
         await message.answer(f"✅ Запись с ID {booking_id} удалена.")
     else:
         await message.answer("❌ Запись не найдена.")
-
 
 # Register Handlers
 def register_handlers(dp: Dispatcher):
