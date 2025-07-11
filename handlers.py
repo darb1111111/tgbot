@@ -90,19 +90,22 @@ async def ask_service(message: types.Message, state: FSMContext):
     await state.set_state(BookingForm.service)
     await message.answer("💅 Какую услугу выбрать?", reply_markup=get_service_keyboard())
 
-async def ignore_text_on_service(message: types.Message):
-    await message.answer("❗ Пожалуйста, выберите услугу, нажав на кнопку.")
+# Убираем хендлер игнорирования текста на service — пусть бот просто не реагирует на текст в этом состоянии.
 
 async def process_service(callback: types.CallbackQuery, state: FSMContext):
     try:
         index = int(callback.data.replace("svc_", ""))
         if not (0 <= index < len(services)):
             await callback.message.answer("❌ Неверная услуга.")
+            await callback.answer()
             return
         await state.update_data(service=services[index])
         await state.set_state(BookingForm.date)
+        await callback.message.edit_reply_markup(reply_markup=None)  # убираем inline клавиатуру после выбора
         await callback.message.answer("🗓 На какую дату записаться? (Формат: ГГГГ-ММ-ДД)")
-    finally:
+        await callback.answer()
+    except Exception as e:
+        print(f"❌ Ошибка process_service: {e}")
         await callback.answer()
 
 async def ask_time(message: types.Message, state: FSMContext):
@@ -230,7 +233,7 @@ def register_handlers(dp: Dispatcher):
     dp.message.register(start, CommandStart())
     dp.message.register(ask_service, BookingForm.name)
     dp.callback_query.register(process_service, lambda c: c.data.startswith("svc_"))
-    dp.message.register(ignore_text_on_service, BookingForm.service)
+    # Убираем регистрацию ignore_text_on_service, чтобы не мешать корректной работе
     dp.message.register(ask_time, BookingForm.date)
     dp.message.register(ask_phone, BookingForm.time)
     dp.message.register(validate_phone, BookingForm.phone)
