@@ -117,10 +117,12 @@ async def ask_time(message: types.Message, state: FSMContext):
     await message.answer("🕒 Во сколько? (Формат: ЧЧ:ММ, например, 14:30)")
     await state.set_state(BookingForm.time)
 
+from datetime import datetime, timedelta
+
 async def ask_phone(message: types.Message, state: FSMContext):
-    time = message.text.strip()
+    time_str = message.text.strip()
     try:
-        parsed_time = datetime.strptime(time, "%H:%M").time()
+        parsed_time = datetime.strptime(time_str, "%H:%M").time()
         if parsed_time.hour < 8 or parsed_time.hour > 21:
             await message.answer("❌ Запись возможна с 08:00 до 21:00.")
             return
@@ -129,17 +131,40 @@ async def ask_phone(message: types.Message, state: FSMContext):
         return
 
     data = await state.get_data()
+    new_date = data.get("date")
+    if not new_date:
+        await message.answer("❌ Дата не указана. Попробуйте начать заново.")
+        await state.clear()
+        return
+
     try:
         bookings = await get_all_bookings()
-        if any(booking[2] == data["date"] and booking[3] == time for booking in bookings):
-            await message.answer("❌ Это время уже занято!")
-            return
+        new_start = datetime.strptime(f"{new_date} {time_str}", "%Y-%m-%d %H:%M")
+        duration = timedelta(hours=2)
+        new_end = new_start + duration
+
+        for booking in bookings:
+            b_date = booking[2]
+            b_time = booking[3]
+            if b_date != new_date:
+                continue
+
+            existing_start = datetime.strptime(f"{b_date} {b_time}", "%Y-%m-%d %H:%M")
+            existing_end = existing_start + timedelta(hours=2)
+
+            if new_start < existing_end and existing_start < new_end:
+                await message.answer(
+                    f"❌ Это время пересекается с другой записью на {b_time}. "
+                    "Попробуйте выбрать другое время."
+                )
+                return
+
     except Exception as e:
         print(f"Ошибка проверки занятости времени: {e}")
         await message.answer("❌ Ошибка проверки времени. Попробуйте позже.")
         return
 
-    await state.update_data(time=time)
+    await state.update_data(time=time_str)
     await message.answer("📱 Введите номер телефона (Формат: +996123456789):")
     await state.set_state(BookingForm.phone)
 
