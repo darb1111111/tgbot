@@ -49,7 +49,7 @@ async def send_to_whatsapp(name, date, time, service, phone) -> bool:
         return False
 
     text = (
-        f"🕵️ Новая запись:\n"
+        f"🕵 Новая запись:\n"
         f"Имя: {name}\n"
         f"Услуга: {service}\n"
         f"Дата: {date}\n"
@@ -64,7 +64,7 @@ async def send_to_whatsapp(name, date, time, service, phone) -> bool:
             async with session.get(url, timeout=10) as resp:
                 return resp.status == 200
     except Exception as e:
-        print(f"❌ Ошибка отправки WhatsApp: {e}")
+        print(f"❌ Ошибка отправки WhatsApp: {type(e)._name_}: {e}")
         return False
 
 # Хендлеры
@@ -103,7 +103,7 @@ async def process_service(callback: types.CallbackQuery, state: FSMContext):
         await callback.message.answer("🗓 На какую дату записаться? (Формат: ГГГГ-ММ-ДД)", reply_markup=ReplyKeyboardRemove())
         await callback.answer()
     except Exception as e:
-        print(f"❌ Ошибка process_service: {e}")
+        print(f"❌ Ошибка process_service: {type(e)._name_}: {e}")
         await callback.answer()
 
 async def ask_time(message: types.Message, state: FSMContext):
@@ -159,8 +159,8 @@ async def ask_phone(message: types.Message, state: FSMContext):
                 await message.answer(f"❌ Пересечение с записью: {b_date} {str(b_time)[:5]} - выберите другое время.", reply_markup=ReplyKeyboardRemove())
                 return
     except Exception as e:
-        print(f"❌ Ошибка проверки времени: {e}")
-        await message.answer("⚠️ Внутренняя ошибка. Попробуйте заново /start", reply_markup=ReplyKeyboardRemove())
+        print(f"❌ Ошибка проверки времени: {type(e)._name_}: {e}")
+        await message.answer("⚠ Внутренняя ошибка. Попробуйте заново /start", reply_markup=ReplyKeyboardRemove())
         await state.clear()
         return
 
@@ -181,6 +181,9 @@ async def validate_phone(message: types.Message, state: FSMContext):
 
     data = await state.get_data()
     print(f"DEBUG: State data before saving: {data}")
+    if not all([data.get("name"), data.get("service"), data.get("date"), data.get("time")]):
+        print("❗Ошибка: в FSMState не хватает данных.")
+
     try:
         success = await add_booking(
             data["name"], data["service"], data["date"], data["time"], phone
@@ -201,8 +204,8 @@ async def validate_phone(message: types.Message, state: FSMContext):
             f"Телефон: {phone}"
         )
     except Exception as e:
-        print(f"❌ Ошибка при завершении записи: {e}")
-        await message.answer("⚠️ Не удалось завершить запись. Попробуйте позже.", reply_markup=ReplyKeyboardRemove())
+        print(f"❌ Ошибка при завершении записи: {type(e)._name_}: {e}")
+        await message.answer("⚠ Не удалось завершить запись. Попробуйте позже.", reply_markup=ReplyKeyboardRemove())
     finally:
         await state.clear()
 

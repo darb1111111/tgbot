@@ -1,4 +1,3 @@
-# db.py
 import aiomysql
 import os
 from dotenv import load_dotenv
@@ -68,6 +67,7 @@ async def add_booking(name, service, date, time, phone):
                 return True
     except Exception as e:
         print(f"❌ Ошибка при добавлении записи: {type(e)._name_}: {e}")
+        print(f"🔍 Параметры: name={name}, service={service}, date={date}, time={time}, phone={phone}")
         return False
 
 async def get_all_bookings():
@@ -81,7 +81,7 @@ async def get_all_bookings():
                 await cur.execute("SELECT id, name, date, time, service, phone FROM appointments")
                 return await cur.fetchall()
     except Exception as e:
-        print(f"❌ Ошибка при получении записей: {e}")
+        print(f"❌ Ошибка при получении записей: {type(e)._name_}: {e}")
         return []
 
 async def delete_booking_by_id(booking_id):
@@ -96,5 +96,5 @@ async def delete_booking_by_id(booking_id):
                 await conn.commit()
                 return cur.rowcount > 0
     except Exception as e:
-        print(f"❌ Ошибка при удалении записи: {e}")
+        print(f"❌ Ошибка при удалении записи: {type(e)._name_}: {e}")
         return False
