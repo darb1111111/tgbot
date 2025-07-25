@@ -25,18 +25,19 @@ if not BOT_TOKEN or not WEBHOOK_URL:
     logger.critical("❌ BOT_TOKEN или WEBHOOK_URL не установлены в .env")
     raise ValueError("Отсутствуют обязательные переменные окружения")
 
-# Инициализация бота, диспетчера, FastAPI
+# Инициализация бота, диспетчера и FastAPI
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 app = FastAPI()
 
+# Регистрация хендлеров сразу при создании диспетчера — так безопаснее
+register_handlers(dp)
 
 # При запуске сервера
 @app.on_event("startup")
 async def on_startup():
     try:
         await init_db()
-        register_handlers(dp)
         await bot.set_webhook(
             url=f"{WEBHOOK_URL}/webhook",
             secret_token=WEBHOOK_SECRET
@@ -45,7 +46,6 @@ async def on_startup():
     except Exception as e:
         logger.exception(f"❌ Ошибка старта: {e}")
         raise
-
 
 # При завершении сервера
 @app.on_event("shutdown")
@@ -57,7 +57,6 @@ async def on_shutdown():
     except Exception as e:
         logger.exception(f"❌ Ошибка завершения: {e}")
 
-
 # Обработка входящих обновлений от Telegram
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
@@ -67,6 +66,8 @@ async def telegram_webhook(request: Request):
             raise HTTPException(status_code=403, detail="Invalid webhook secret")
 
         data = await request.json()
+        logger.debug(f"Получено обновление: {data}")  # Для отладки
+
         update = Update.model_validate(data)
         await dp.feed_update(bot, update)
         return {"ok": True}

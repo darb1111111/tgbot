@@ -44,6 +44,7 @@ async def close_db():
     if pool:
         await pool.close()
         await pool.wait_closed()
+        pool = None  # Очистить ссылку, чтобы не было утечек
 
 async def add_booking(name, service, date, time, phone):
     global pool
@@ -57,6 +58,7 @@ async def add_booking(name, service, date, time, phone):
                 (name, service, date, time, phone)
             )
             await conn.commit()
+            return True  # Возвращаем True для подтверждения успешности
 
 async def get_all_bookings():
     global pool
@@ -65,7 +67,6 @@ async def get_all_bookings():
 
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
-            # Порядок совпадает с твоей таблицей
             await cur.execute("SELECT id, name, service, date, time, phone FROM appointments")
             return await cur.fetchall()
 

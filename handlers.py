@@ -130,11 +130,6 @@ async def ask_time(message: types.Message, state: FSMContext):
     await message.answer("🕒 Во сколько? (Формат: ЧЧ:ММ, например, 14:30)", reply_markup=ReplyKeyboardRemove())
 
 async def ask_phone(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    last_processed = data.get("last_processed")
-    if last_processed and (datetime.now() - last_processed) < timedelta(seconds=2):
-        return
-
     time_str = message.text.strip()
     try:
         time_obj = datetime.strptime(time_str, "%H:%M").time()
@@ -145,7 +140,15 @@ async def ask_phone(message: types.Message, state: FSMContext):
         await message.answer("❌ Неверный формат времени. Введите ЧЧ:ММ.", reply_markup=ReplyKeyboardRemove())
         return
 
+    data = await state.get_data()
     date = data.get("date")
+
+    if not date:
+        await message.answer("⚠ Данные о дате не найдены. Попробуйте начать заново командой /start.")
+        await state.clear()
+        return
+
+    print(f"DEBUG: date из состояния: {date}, time из сообщения: {time_str}")
 
     try:
         new_start = datetime.strptime(f"{date} {time_str}", "%Y-%m-%d %H:%M")
@@ -154,12 +157,10 @@ async def ask_phone(message: types.Message, state: FSMContext):
         print(f"DEBUG: Проверяем пересечения для {new_start} - {new_end}, всего записей: {len(bookings)}")
 
         for b in bookings:
-            print(f"DEBUG: Запись из БД: {b}")
             # b = (id, name, service, date, time, phone)
             b_date = b[3]
             b_time = b[4]
 
-            # b_time — строка формата "HH:MM"
             exist_start = datetime.strptime(f"{b_date} {b_time}", "%Y-%m-%d %H:%M")
             exist_end = exist_start + timedelta(hours=2)
 
@@ -172,7 +173,7 @@ async def ask_phone(message: types.Message, state: FSMContext):
         await state.clear()
         return
 
-    await state.update_data(time=time_str, last_processed=datetime.now())
+    await state.update_data(time=time_str)
     await state.set_state(BookingForm.phone)
     await message.answer("📱 Введите номер телефона (Формат: +996123456789):", reply_markup=ReplyKeyboardRemove())
 
@@ -192,13 +193,9 @@ async def validate_phone(message: types.Message, state: FSMContext):
         print("❗Ошибка: в FSMState не хватает данных.")
 
     try:
-        success = await add_booking(
+        await add_booking(
             data["name"], data["service"], data["date"], data["time"], phone
         )
-        if not success:
-            await message.answer("❌ Не удалось сохранить запись. Попробуйте позже.", reply_markup=ReplyKeyboardRemove())
-            await state.clear()
-            return
 
         await send_to_whatsapp(data["name"], data["date"], data["time"], data["service"], phone)
 
@@ -228,7 +225,7 @@ async def view_bookings(message: types.Message):
         return
 
     text = "\n\n".join(
-        f"ID: {b[0]}\nИмя: {b[1]}\nУслуга: {b[4]}\nДата: {b[2]}\nВремя: {b[3]}\nТелефон: {b[5]}"
+        f"ID: {b[0]}\nИмя: {b[1]}\nУслуга: {b[2]}\nДата: {b[3]}\nВремя: {b[4]}\nТелефон: {b[5]}"
         for b in bookings
     )
     await message.answer(f"📓 Все записи:\n\n{text}")
