@@ -161,7 +161,7 @@ async def ask_phone(message: types.Message, state: FSMContext):
             b_date = b[3]
             b_time = b[4]
 
-            exist_start = datetime.strptime(f"{b_date} {b_time}", "%Y-%m-%d %H:%M")
+            exist_start = datetime.strptime(f"{b_date} {b_time}", "%Y-%m-%d %H:%M:%S")
             exist_end = exist_start + timedelta(hours=2)
 
             if new_start < exist_end and exist_start < new_end:
