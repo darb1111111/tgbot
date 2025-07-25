@@ -65,6 +65,7 @@ async def get_all_bookings():
 
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
+            # Порядок совпадает с твоей таблицей
             await cur.execute("SELECT id, name, service, date, time, phone FROM appointments")
             return await cur.fetchall()
 

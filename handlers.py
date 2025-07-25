@@ -145,21 +145,26 @@ async def ask_phone(message: types.Message, state: FSMContext):
         await message.answer("❌ Неверный формат времени. Введите ЧЧ:ММ.", reply_markup=ReplyKeyboardRemove())
         return
 
-    data = await state.get_data()
     date = data.get("date")
 
     try:
         new_start = datetime.strptime(f"{date} {time_str}", "%Y-%m-%d %H:%M")
         new_end = new_start + timedelta(hours=2)
         bookings = await get_all_bookings()
+        print(f"DEBUG: Проверяем пересечения для {new_start} - {new_end}, всего записей: {len(bookings)}")
 
         for b in bookings:
-            _, _, b_date, b_time, *_ = b
-            exist_start = datetime.strptime(f"{b_date} {str(b_time)[:5]}", "%Y-%m-%d %H:%M")
+            print(f"DEBUG: Запись из БД: {b}")
+            # b = (id, name, service, date, time, phone)
+            b_date = b[3]
+            b_time = b[4]
+
+            # b_time — строка формата "HH:MM"
+            exist_start = datetime.strptime(f"{b_date} {b_time}", "%Y-%m-%d %H:%M")
             exist_end = exist_start + timedelta(hours=2)
 
             if new_start < exist_end and exist_start < new_end:
-                await message.answer(f"❌ Пересечение с записью: {b_date} {str(b_time)[:5]} - выберите другое время.", reply_markup=ReplyKeyboardRemove())
+                await message.answer(f"❌ Пересечение с записью: {b_date} {b_time} - выберите другое время.", reply_markup=ReplyKeyboardRemove())
                 return
     except Exception as e:
         print(f"❌ Ошибка проверки времени: {type(e).__name__}: {e}")
