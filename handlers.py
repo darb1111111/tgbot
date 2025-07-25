@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 import aiohttp
 from aiogram import types, Dispatcher
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
@@ -64,7 +64,7 @@ async def send_to_whatsapp(name, date, time, service, phone) -> bool:
             async with session.get(url, timeout=10) as resp:
                 return resp.status == 200
     except Exception as e:
-        print(f"❌ Ошибка отправки WhatsApp: {type(e)._name_}: {e}")
+        print(f"❌ Ошибка отправки WhatsApp: {type(e).__name__}: {e}")
         return False
 
 # Хендлеры
@@ -87,9 +87,6 @@ async def ask_service(message: types.Message, state: FSMContext):
     await state.set_state(BookingForm.service)
     await message.answer("💅 Какую услугу выбрать?", reply_markup=get_service_keyboard())
 
-async def ignore_text_on_service(message: types.Message, state: FSMContext):
-    await message.answer("❌ Пожалуйста, выберите услугу, нажав на одну из кнопок ниже:", reply_markup=get_service_keyboard())
-
 async def process_service(callback: types.CallbackQuery, state: FSMContext):
     try:
         index = int(callback.data.replace("svc_", ""))
@@ -97,14 +94,20 @@ async def process_service(callback: types.CallbackQuery, state: FSMContext):
             await callback.message.answer("❌ Неверная услуга.")
             await callback.answer()
             return
+
         await state.update_data(service=services[index])
         await state.set_state(BookingForm.date)
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer("🗓 На какую дату записаться? (Формат: ГГГГ-ММ-ДД)", reply_markup=ReplyKeyboardRemove())
         await callback.answer()
+        print(f"✅ Услуга выбрана: {services[index]}")
     except Exception as e:
-        print(f"❌ Ошибка process_service: {type(e)._name_}: {e}")
+        print(f"❌ Ошибка process_service: {type(e).__name__}: {e}")
         await callback.answer()
+
+async def ignore_text_on_service(message: types.Message, state: FSMContext):
+    await message.answer("❌ Пожалуйста, выберите услугу, нажав на одну из кнопок ниже:", reply_markup=get_service_keyboard())
+    await state.set_state(BookingForm.service)
 
 async def ask_time(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -159,7 +162,7 @@ async def ask_phone(message: types.Message, state: FSMContext):
                 await message.answer(f"❌ Пересечение с записью: {b_date} {str(b_time)[:5]} - выберите другое время.", reply_markup=ReplyKeyboardRemove())
                 return
     except Exception as e:
-        print(f"❌ Ошибка проверки времени: {type(e)._name_}: {e}")
+        print(f"❌ Ошибка проверки времени: {type(e).__name__}: {e}")
         await message.answer("⚠ Внутренняя ошибка. Попробуйте заново /start", reply_markup=ReplyKeyboardRemove())
         await state.clear()
         return
@@ -179,7 +182,6 @@ async def validate_phone(message: types.Message, state: FSMContext):
         await message.answer("❌ Неверный формат номера. Используйте +996 и 9 цифр.", reply_markup=ReplyKeyboardRemove())
         return
 
-    data = await state.get_data()
     print(f"DEBUG: State data before saving: {data}")
     if not all([data.get("name"), data.get("service"), data.get("date"), data.get("time")]):
         print("❗Ошибка: в FSMState не хватает данных.")
@@ -204,7 +206,7 @@ async def validate_phone(message: types.Message, state: FSMContext):
             f"Телефон: {phone}"
         )
     except Exception as e:
-        print(f"❌ Ошибка при завершении записи: {type(e)._name_}: {e}")
+        print(f"❌ Ошибка при завершении записи: {type(e).__name__}: {e}")
         await message.answer("⚠ Не удалось завершить запись. Попробуйте позже.", reply_markup=ReplyKeyboardRemove())
     finally:
         await state.clear()
@@ -246,11 +248,18 @@ async def delete_by_id(message: types.Message):
 # Регистрация хендлеров
 def register_handlers(dp: Dispatcher):
     dp.message.register(start, CommandStart())
+
+    dp.callback_query.register(
+        process_service,
+        lambda c: c.data and c.data.startswith("svc_"),
+        StateFilter(BookingForm.service)
+    )
+
+    dp.message.register(ignore_text_on_service, StateFilter(BookingForm.service))
     dp.message.register(ask_service, BookingForm.name)
-    dp.callback_query.register(process_service, lambda c: c.data.startswith("svc_"))
-    dp.message.register(ignore_text_on_service, BookingForm.service)
     dp.message.register(ask_time, BookingForm.date)
     dp.message.register(ask_phone, BookingForm.time)
     dp.message.register(validate_phone, BookingForm.phone)
+
     dp.message.register(view_bookings, Command("viewbookings"))
     dp.message.register(delete_by_id, Command("delete"))
