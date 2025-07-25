@@ -5,32 +5,33 @@ from fastapi import FastAPI, Request, HTTPException
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Update
-
 from handlers import register_handlers
 from db import init_db, close_db
 
-# Загрузка .env
+# Загрузка переменных окружения
 load_dotenv()
 
-# Настройка логов
+# Логгирование
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("main")
 
-# Переменные окружения
+# Переменные из .env
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "supersecret")
 
+# Проверка наличия обязательных переменных
 if not BOT_TOKEN or not WEBHOOK_URL:
-    logger.error("❌ BOT_TOKEN или WEBHOOK_URL не установлены в .env")
+    logger.critical("❌ BOT_TOKEN или WEBHOOK_URL не установлены в .env")
     raise ValueError("Отсутствуют обязательные переменные окружения")
 
-# Инициализация компонентов
+# Инициализация бота, диспетчера, FastAPI
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 app = FastAPI()
 
-# Подключение хендлеров и БД при запуске
+
+# При запуске сервера
 @app.on_event("startup")
 async def on_startup():
     try:
@@ -40,12 +41,13 @@ async def on_startup():
             url=f"{WEBHOOK_URL}/webhook",
             secret_token=WEBHOOK_SECRET
         )
-        logger.info("✅ Вебхук успешно установлен")
+        logger.info("✅ Вебхук установлен")
     except Exception as e:
-        logger.error(f"❌ Ошибка запуска: {type(e)._name_}: {e}")
+        logger.exception(f"❌ Ошибка старта: {e}")
         raise
 
-# Отключение вебхука и БД при завершении
+
+# При завершении сервера
 @app.on_event("shutdown")
 async def on_shutdown():
     try:
@@ -53,14 +55,15 @@ async def on_shutdown():
         await close_db()
         logger.info("✅ Вебхук удалён, соединение с БД закрыто")
     except Exception as e:
-        logger.error(f"❌ Ошибка завершения: {type(e)._name_}: {e}")
+        logger.exception(f"❌ Ошибка завершения: {e}")
 
-# Обработка обновлений от Telegram
+
+# Обработка входящих обновлений от Telegram
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
     try:
         if request.headers.get("X-Telegram-Bot-Api-Secret-Token") != WEBHOOK_SECRET:
-            logger.warning("⚠ Неверный секрет вебхука")
+            logger.warning("⚠ Неверный секретный токен вебхука")
             raise HTTPException(status_code=403, detail="Invalid webhook secret")
 
         data = await request.json()
@@ -68,5 +71,5 @@ async def telegram_webhook(request: Request):
         await dp.feed_update(bot, update)
         return {"ok": True}
     except Exception as e:
-        logger.error(f"❌ Ошибка обработки вебхука: {type(e)._name_}: {e}")
+        logger.exception(f"❌ Ошибка при обработке запроса Telegram: {e}")
         return {"ok": False}
